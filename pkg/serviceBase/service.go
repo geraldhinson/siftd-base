@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/geraldhinson/siftd/service-base/pkg/constants"
-	"github.com/geraldhinson/siftd/service-base/pkg/security"
+	"github.com/geraldhinson/siftd-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/security"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"

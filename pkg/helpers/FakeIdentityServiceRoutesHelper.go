@@ -7,9 +7,9 @@ package helpers
 import (
 	"net/http"
 
-	"github.com/geraldhinson/siftd/service-base/pkg/constants"
-	"github.com/geraldhinson/siftd/service-base/pkg/security"
-	"github.com/geraldhinson/siftd/service-base/pkg/serviceBase"
+	"github.com/geraldhinson/siftd-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/security"
+	"github.com/geraldhinson/siftd-base/pkg/serviceBase"
 	"github.com/gorilla/mux"
 )
 

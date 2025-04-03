@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/geraldhinson/siftd/service-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/geraldhinson/siftd/service-base/pkg/constants"
-	"github.com/geraldhinson/siftd/service-base/pkg/resourceStore"
+	"github.com/geraldhinson/siftd-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/resourceStore"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )

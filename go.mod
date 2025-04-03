@@ -1,4 +1,4 @@
-module github.com/geraldhinson/siftd/service-base
+module github.com/geraldhinson/siftd-base
 
 go 1.23.6
 

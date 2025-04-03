@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/geraldhinson/siftd/service-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"

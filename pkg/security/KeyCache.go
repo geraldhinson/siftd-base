@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/geraldhinson/siftd/service-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )

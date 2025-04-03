@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/geraldhinson/siftd/service-base/pkg/constants"
-	"github.com/geraldhinson/siftd/service-base/pkg/resourceStore"
-	"github.com/geraldhinson/siftd/service-base/pkg/security"
-	"github.com/geraldhinson/siftd/service-base/pkg/serviceBase"
+	"github.com/geraldhinson/siftd-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/resourceStore"
+	"github.com/geraldhinson/siftd-base/pkg/security"
+	"github.com/geraldhinson/siftd-base/pkg/serviceBase"
 )
 
 type HealthCheckRoutesHelper[R any] struct {

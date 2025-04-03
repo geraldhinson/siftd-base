@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/geraldhinson/siftd/service-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
