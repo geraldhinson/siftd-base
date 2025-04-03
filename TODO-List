@@ -1,0 +1,15 @@
+- resolve TODOs in source files
+- create localized strings file
+- add updatedBy to service base
+- add support for impoersonation?
+- convert unit tests to use framework (see unit-test.go for how to)
+- fix get by id not using owner-id (resource store)
+- add an example method in the example resource showing rpc style (vs PATCH)
+- add a bit more detail Employee in example
+- DONE: set both DBeaver and Postman to save to the example
+- DONE: convert query service to new model like example resource
+- clean up info logging in query service 
+- start using git/github vs zipped in dropbox
+- figure out how to support https listening
+- maybe convert to workspaces if it eliminates the need for go.mod aliasing when on local machine
+- cache busting required?
