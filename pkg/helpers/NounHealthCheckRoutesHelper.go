@@ -20,7 +20,15 @@ type HealthCheckRoutesHelper[R any] struct {
 	store *resourceStore.PostgresResourceStoreWithJournal[R]
 }
 
-func NewHealthCheckRoutesHelper[R any](serviceBase *serviceBase.ServiceBase, authModel *security.AuthModel, store *resourceStore.PostgresResourceStoreWithJournal[R]) *HealthCheckRoutesHelper[R] {
+func NewHealthCheckRoutesHelper[R any](serviceBase *serviceBase.ServiceBase, authModel *security.AuthModel) *HealthCheckRoutesHelper[R] {
+
+	store, err := resourceStore.NewPostgresResourceStoreWithJournal[R](
+		serviceBase.Configuration,
+		serviceBase.Logger)
+	if err != nil {
+		serviceBase.Logger.Println("Error creating PostgresResourceStoreWithJournal:", err)
+		return nil
+	}
 
 	HealthCheckRoutesHelper := &HealthCheckRoutesHelper[R]{
 		ServiceBase: serviceBase,

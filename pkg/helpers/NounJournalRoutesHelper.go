@@ -20,7 +20,16 @@ type NounJournalRoutesHelper[R any] struct {
 	store *resourceStore.PostgresResourceStoreWithJournal[R]
 }
 
-func NewNounJournalRoutesHelper[R any](serviceBase *serviceBase.ServiceBase, authModel *security.AuthModel, store *resourceStore.PostgresResourceStoreWithJournal[R]) *NounJournalRoutesHelper[R] {
+func NewNounJournalRoutesHelper[R any](serviceBase *serviceBase.ServiceBase,
+	authModel *security.AuthModel) *NounJournalRoutesHelper[R] {
+
+	store, err := resourceStore.NewPostgresResourceStoreWithJournal[R](
+		serviceBase.Configuration,
+		serviceBase.Logger)
+	if err != nil {
+		serviceBase.Logger.Println("Error creating PostgresResourceStoreWithJournal:", err)
+		return nil
+	}
 
 	nounJournalRoutesHelper := &NounJournalRoutesHelper[R]{
 		ServiceBase: serviceBase,
