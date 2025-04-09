@@ -57,7 +57,7 @@ func (h *HealthCheckRoutesHelper[R]) GetHealthStandalone(w http.ResponseWriter, 
 
 	err := h.store.HealthCheck()
 	if err != nil {
-		h.Logger.Info("Call to HealthCheck in GetHealthStandalone failed with: ", err)
+		h.Logger.Info("the call to the resource store HealthCheck() in GetHealthStandalone failed with: ", err)
 		health.DependencyStatus["database"] = constants.HEALTH_STATUS_UNHEALTHY
 		health.Status = constants.HEALTH_STATUS_UNHEALTHY
 	} else {
@@ -69,7 +69,7 @@ func (h *HealthCheckRoutesHelper[R]) GetHealthStandalone(w http.ResponseWriter, 
 
 	jsonResults, errmsg := json.Marshal(health)
 	if errmsg != nil {
-		h.Logger.Info("Failed to convert health structure to json: ", errmsg)
+		h.Logger.Info("Failed to convert health structure to json in GetHealthStandalone: ", errmsg)
 		h.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, errmsg)
 		return
 	}

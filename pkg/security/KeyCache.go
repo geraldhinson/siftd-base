@@ -34,10 +34,16 @@ type KeyCache struct {
 	publicKeys    publicKeyMap
 	logger        *logrus.Logger
 	configuration *viper.Viper
+	debugLevel    int
 }
 
 func NewPublicKeyCache(configuration *viper.Viper, logger *logrus.Logger) *KeyCache {
-	keyCache := &KeyCache{logger: logger, configuration: configuration}
+	var debugLevel = 0
+	if configuration.GetString(constants.DEBUGSIFTD_AUTH) != "" {
+		debugLevel = configuration.GetInt(constants.DEBUGSIFTD_AUTH)
+	}
+
+	keyCache := &KeyCache{logger: logger, configuration: configuration, debugLevel: debugLevel}
 	keyCache.publicKeys = make(publicKeyMap)
 
 	return keyCache
@@ -50,7 +56,9 @@ func (k *KeyCache) PurgeOldKeys() {
 	// loop through all keys and purge any that are older than 15 minutes
 	for kid, key := range k.publicKeys {
 		if time.Now().Unix()-key.createdTime > int64(expiryTime) {
-			k.logger.Infof("Purging old key: %s", kid)
+			if k.debugLevel > 0 {
+				k.logger.Infof("Purging old key: %s", kid)
+			}
 			delete(k.publicKeys, kid)
 		}
 	}
@@ -65,19 +73,24 @@ func (k *KeyCache) GetPublicKeyById(kid string) *rsa.PublicKey {
 	var foundInCache bool = false
 	if key, ok := k.publicKeys[kid]; ok {
 		foundInCache = true
-		k.logger.Infof("Key found in cache: %s", kid)
+		if k.debugLevel > 0 {
+			k.logger.Infof("Key found in cache: %s", kid)
+		}
 		publicKeyBytes = key.PublicKeyBytes
 	} else {
-		k.logger.Infof("Key not found in cache: %s", kid)
+		if k.debugLevel > 0 {
+			k.logger.Infof("Key not found in cache: %s", kid)
+		}
 		publicKeyBytes, err = k.FetchPublicKeyFromIdentityService(kid)
 		if err != nil {
-			k.logger.Infof("failed to fetch public key from identity service: %v", err)
+			if k.debugLevel > 0 {
+				k.logger.Infof("failed to fetch public key from identity service: %v", err)
+			}
 			return nil
 		}
 	}
 
 	// Parse the public key
-	//	pubKey, err := x509.ParsePKIXPublicKey(k.publicKeys[kid].PublicKeyBytes)
 	pubKey, err := x509.ParsePKIXPublicKey(publicKeyBytes)
 	if err != nil {
 		k.logger.Infof("failed to parse public key: %v", err)

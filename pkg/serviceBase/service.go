@@ -82,9 +82,36 @@ func setup() (*logrus.Logger, *viper.Viper) {
 	return logger, configuration
 }
 
-// convenience function to simplify the call to NewAuthModel
-func (sb *ServiceBase) NewAuthModel(authTimeout security.AuthTimeout, authTypes []security.AuthTypes, authGroups []security.AuthGroups) *security.AuthModel {
-	return security.NewAuthModelExpanded(sb.Configuration, sb.Logger, sb.KeyCache, authTimeout, authTypes, authGroups)
+// convenience function to simplify the call to the actual NewAuthModel (in Auth.go)
+//
+// Example usage from a service:
+//
+//   authModel, err := NewAuthModel(security.REALM_MEMBER, security.MATCHING_IDENTITY, security.ONE_DAY, nil)
+//
+// To add additional policies to the authModel, use the AddPolicy method (note that the AddPolicy calls are done on the returned authModel):
+//
+//   err = authModel.AddPolicy(security.REALM_MEMBER, security.APPROVED_GROUPS, security.ONE_DAY, []string{"admin"})
+//   err = authModel.AddPolicy(security.REALM_MEMBER, security.APPROVED_IDENTITIES, security.ONE_DAY, []string{"GUID-fake-member-GUID"})
+//   err = authModel.AddPolicy(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
+//
+// You can also call NewAuthModel multiple times if you want to create multiple auth models for different routes.
+// For example you mght want to secure routes that are only available to admins or members of a given realm.
+//
+//   authModel, err := NewAuthModel(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
+//
+
+func (sb *ServiceBase) NewAuthModel(realm string, authType security.AuthTypes, authTimeout security.AuthTimeout, list []string) (*security.AuthModel, error) {
+
+	authModel := security.NewAuthModel(sb.Configuration, sb.Logger, sb.KeyCache)
+
+	err := authModel.AddPolicy(realm, authType, authTimeout, list)
+	if err != nil {
+		sb.Logger.Errorf("Failed to create auth policy: %v", err)
+		return nil, err
+	}
+
+	//	sb.Logger.Infof("Auth model created with policies: %v", policies)
+	return authModel, err
 }
 
 func (sb *ServiceBase) RegisterRoute(httpMethod string, routeString string, authModelUsers *security.AuthModel, handler func(http.ResponseWriter, *http.Request)) {

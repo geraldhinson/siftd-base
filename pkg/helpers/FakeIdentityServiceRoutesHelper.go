@@ -83,7 +83,7 @@ func (k *FakeIdentityServiceRoutesHelper) handleFakeGetPublicKey(w http.Response
 
 	publicKeyBytes, err := k.FakeKeyStore.GetPublicKey(kid)
 	if err != nil {
-		k.Logger.Infof("failed to fetch public key from identity service: %v", err)
+		k.Logger.Infof("failed to find public key in fake identity service: %v", err)
 		k.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 	} else {
 		k.WriteHttpOK(w, publicKeyBytes)

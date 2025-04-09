@@ -58,13 +58,13 @@ func (j *NounJournalRoutesHelper[R]) GetJournalChanges(w http.ResponseWriter, r 
 	params := j.GetQueryParams(r)
 	clock, err := strconv.ParseInt(params["clock"], 10, 64)
 	if err != nil {
-		j.Logger.Info("Failed to parse 'clock' parameter: ", err)
+		j.Logger.Info("Failed to parse 'clock' parameter in GetJournalChanges: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
 	limit, err := strconv.ParseInt(params["limit"], 10, 64)
 	if err != nil {
-		j.Logger.Info("Failed to parse 'clock' parameter: ", err)
+		j.Logger.Info("Failed to parse 'limit' parameter in GetJournalChanges: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
@@ -73,7 +73,7 @@ func (j *NounJournalRoutesHelper[R]) GetJournalChanges(w http.ResponseWriter, r 
 	err = j.store.GetJournalChanges(clock, limit, &journalEntries)
 	//	START HERE with GetJournalChanges returning error code like the other methods do the noun router
 	if err != nil {
-		j.Logger.Info("Call to GetJournalChanges in GetJournalChanges failed with: ", err)
+		j.Logger.Info("Call to resource store GetJournalChanges() in GetJournalChanges failed with: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, err)
 		return
 	}
@@ -97,7 +97,7 @@ func (j *NounJournalRoutesHelper[R]) GetJournalMaxClock(w http.ResponseWriter, r
 	err := j.store.GetJournalMaxClock(&maxClock)
 	//	START HERE with GetJournalChanges returning error code like the other methods do the noun router
 	if err != nil {
-		j.Logger.Info("Call to GetJournalMaxClock in GetJournalMaxClock failed with: ", err)
+		j.Logger.Info("Call to resource store GetJournalMaxClock() in GetJournalMaxClock failed with: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, err)
 		return
 	}

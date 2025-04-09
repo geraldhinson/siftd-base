@@ -65,6 +65,7 @@ func (k *KeyStore) JwtFakeUserLogin() (based64JWT []byte, err error) {
 	claims["jti"] = uuid.New().String()
 	claims["sub"] = "GUID-fake-member-GUID"
 	claims["sub_type"] = "Member"
+	claims["sub_name"] = "Fake (Member) User"
 	claims["iat"] = time.Now().Add(time.Hour).Unix() // TODO: why add an hour vs current time? Bug?
 	claims["iss"] = "siftd-service-base"
 	claims["roles"] = []string{"admin"}
@@ -98,6 +99,7 @@ func (k *KeyStore) JwtFakeServiceLogin() (based64JWT []byte, err error) {
 	claims["jti"] = uuid.New().String()
 	claims["sub"] = "GUID-fake-service-GUID"
 	claims["sub_type"] = "Machine"
+	claims["sub_name"] = "Fake (Machine) Service"
 	claims["iat"] = time.Now().Add(time.Hour).Unix() // TODO: why add an hour vs current time? Bug?
 	claims["iss"] = "siftd-service-base"
 
@@ -174,18 +176,3 @@ func (k *KeyStore) generatePrivPubKeys() {
 		k.logger.Fatalf("Error when encoding public pem for testing: %s", err)
 	}
 }
-
-/*
-	listenAddress := configuration.GetString("LISTEN_ADDRESS")
-	if strings.Contains(listenAddress, "localhost") {
-		// for local testing with JWTs only - only works with a single hard-code member or machine identity
-	} else {
-		// for production - will fetch public keys from a key server
-		keyStore = security.NewKeyStore(configuration, logger)
-		if keyStore == nil {
-			logger.Fatalf("Failed to create key store. Shutting down.")
-			return nil
-		}
-	}
-
-*/

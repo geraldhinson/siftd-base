@@ -1,7 +1,7 @@
 package constants
 
 const (
-	DEBUGTRACE = false
+	DEBUGSIFTD_AUTH = "DEBUGSIFTD_AUTH"
 )
 
 const (

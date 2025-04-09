@@ -12,4 +12,4 @@
 - start using git/github vs zipped in dropbox
 - figure out how to support https listening
 - maybe convert to workspaces if it eliminates the need for go.mod aliasing when on local machine
-- cache busting required?
+- cache busting required? For healthchecks? Other?
