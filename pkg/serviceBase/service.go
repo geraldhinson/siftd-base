@@ -31,7 +31,7 @@ func NewServiceBase() *ServiceBase {
 
 	logger, configuration := setup()
 	if logger == nil || configuration == nil {
-		fmt.Println("Setup failed for query service. Shutting down.")
+		fmt.Println("Setup failed for service. Shutting down.")
 		return nil
 	}
 
@@ -64,7 +64,7 @@ func setup() (*logrus.Logger, *viper.Viper) {
 	// Initialize logger
 	logger := logrus.New()
 	if logger == nil {
-		fmt.Println("Failed to create logger for query service. Shutting down.")
+		fmt.Println("Failed to create logger for service. Shutting down.")
 		return nil, nil
 	}
 
@@ -74,7 +74,7 @@ func setup() (*logrus.Logger, *viper.Viper) {
 	viper.AutomaticEnv() // overrides app.env with environment variables if same name found
 	err := viper.ReadInConfig()
 	if err != nil {
-		logger.Info("Failed to read config for query service. Shutting down.")
+		logger.Info("Failed to read config for service. Shutting down.")
 		return nil, nil
 	}
 	configuration := viper.GetViper()
@@ -94,7 +94,7 @@ func setup() (*logrus.Logger, *viper.Viper) {
 //   err = authModel.AddPolicy(security.REALM_MEMBER, security.APPROVED_IDENTITIES, security.ONE_DAY, []string{"GUID-fake-member-GUID"})
 //   err = authModel.AddPolicy(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
 //
-// You can also call NewAuthModel multiple times if you want to create multiple auth models for different routes.
+// You can also call NewAuthModel multiple times if you want to create differing auth models for different routes.
 // For example you mght want to secure routes that are only available to admins or members of a given realm.
 //
 //   authModel, err := NewAuthModel(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)

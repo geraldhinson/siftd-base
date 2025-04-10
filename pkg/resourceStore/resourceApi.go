@@ -21,15 +21,23 @@ type PostgresResourceStoreWithJournal[R any] struct {
 	logger               *logrus.Logger
 	dbPool               *pgxpool.Pool
 	rootCtx              *context.Context
-	cancel               *context.CancelFunc
-	cmds                 *PostgresCommandHelper
+	cancel               *context.CancelFunc //TODO: not using this currently
+	Cmds                 *PostgresCommandHelper
 	// resource        R
 }
 
 // private methods below here
 func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logger *logrus.Logger) (*PostgresResourceStoreWithJournal[R], error) {
 
-	store := &PostgresResourceStoreWithJournal[R]{logger: logger, cmds: &PostgresCommandHelper{}}
+	// validate inputs
+	if configuration == nil {
+		return nil, fmt.Errorf("configuration is nil")
+	}
+	if logger == nil {
+		return nil, fmt.Errorf("logger is nil")
+	}
+
+	store := &PostgresResourceStoreWithJournal[R]{logger: logger, Cmds: &PostgresCommandHelper{}}
 
 	store.dbConnectString = configuration.GetString(constants.DB_CONNECTION_STRING)
 	if store.dbConnectString == "" {
@@ -70,7 +78,7 @@ func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logg
 // HealthCheck performs a health check on the database
 func (store *PostgresResourceStoreWithJournal[R]) HealthCheck() error {
 
-	query := store.cmds.GetHealthCheckCommand()
+	query := store.Cmds.GetHealthCheckCommand()
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query)
 	// rows, err := store.dbPool.Query(*store.rootCtx, query, ids)
@@ -86,7 +94,7 @@ func (store *PostgresResourceStoreWithJournal[R]) HealthCheck() error {
 
 // GetById retrieves a resource by its ID
 func (store *PostgresResourceStoreWithJournal[R]) GetById(id string, resource *R) (int, error) {
-	query, params := store.cmds.GetResourceByIdCommand(id)
+	query, params := store.Cmds.GetResourceByIdCommand(id)
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query, params)
 	if err != nil {
@@ -120,7 +128,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetById(id string, resource *R
 
 // GetByOwner retrieves resources by owner ID
 func (store *PostgresResourceStoreWithJournal[R]) GetByOwnerId(ownerId string, resources *[]R) (int, error) {
-	query, params := store.cmds.GetResourcesByOwnerIdCommand(ownerId)
+	query, params := store.Cmds.GetResourcesByOwnerIdCommand(ownerId)
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query, params)
 	if err != nil {
@@ -157,7 +165,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetByOwnerId(ownerId string, r
 // We support >= clock to allow for fetching a specific clock entry (e.g. clock = 25, limit = 1) when the client
 // has the clock value for that one and needs to fetch it again for some reason.
 func (store *PostgresResourceStoreWithJournal[R]) GetJournalChanges(clock int64, limit int64, journalEntries *[]ResourceJournalEntry) error {
-	query, params := store.cmds.GetJournalChangesCommand(clock, limit)
+	query, params := store.Cmds.GetJournalChangesCommand(clock, limit)
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query, params)
 	if err != nil {
@@ -180,7 +188,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalChanges(clock int64,
 }
 
 func (store *PostgresResourceStoreWithJournal[R]) GetJournalMaxClock(maxClock *uint64) error {
-	query := store.cmds.GetJournalMaxClockCommand()
+	query := store.Cmds.GetJournalMaxClockCommand()
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query)
 	if err != nil {
@@ -219,7 +227,7 @@ func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResou
 		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("error serializing resource in CreateResource: %w", err)
 	}
 
-	query, params := store.cmds.GetInsertResourceWithJournalCommand(resource, jsonResource, store.journalPartitionName)
+	query, params := store.Cmds.GetInsertResourceWithJournalCommand(resource, jsonResource, store.journalPartitionName)
 
 	_, err = store.dbPool.Exec(*store.rootCtx, query, params)
 	if err != nil {
@@ -258,7 +266,7 @@ func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResou
 		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("error serializing resource in UpdateResource: %w", err)
 	}
 
-	query, params := store.cmds.GetUpdateResourceWithJournalCommand(resource, versionToUpdate, jsonResource, store.journalPartitionName)
+	query, params := store.Cmds.GetUpdateResourceWithJournalCommand(resource, versionToUpdate, jsonResource, store.journalPartitionName)
 
 	command, err := store.dbPool.Exec(*store.rootCtx, query, params)
 	if err != nil {

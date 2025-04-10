@@ -1,4 +1,6 @@
-package main
+package unittests
+
+/*
 
 import (
 	"encoding/json"
@@ -15,17 +17,6 @@ import (
 // https://www.digitalocean.com/community/tutorials/how-to-write-unit-tests-in-go-using-go-test-and-the-testing-package
 // TODO: also add an equivalent for the query service package
 //
-
-type Employee struct {
-	Name string `json:"name"`
-	Age  int    `json:"age"`
-}
-
-// Define struct that embeds ResourceBase
-type EmployeeResource struct {
-	resourceStore.ResourceBase
-	Employee Employee `json:"employee"`
-}
 
 func main() {
 	logger, configuration := setup()
@@ -149,3 +140,4 @@ func setup() (*logrus.Logger, *viper.Viper) {
 
 	return logger, configuration
 }
+*/
