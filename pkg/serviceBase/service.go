@@ -35,11 +35,16 @@ func NewServiceBase() *ServiceBase {
 		return nil
 	}
 
-	logger.Infof("Validating configuration for [Service: %s]", configuration.GetString(constants.SERVICE_INSTANCE_NAME))
+	serviceInstanceName := configuration.GetString(constants.SERVICE_INSTANCE_NAME)
+	if serviceInstanceName == "" {
+		logger.Info("Service instance name is not set in the configuration. Shutting down.")
+		return nil
+	}
+	logger.Infof("Validating configuration for [Service: %s]", serviceInstanceName)
 
 	keyCache := security.NewPublicKeyCache(configuration, logger)
 	if keyCache == nil {
-		logger.Fatalf("Failed to create key store. Shutting down.")
+		logger.Info("Failed to create key store. Shutting down.")
 		return nil
 	}
 

@@ -2,7 +2,7 @@
 - create localized strings file
 - add updatedBy to service base
 - add support for impoersonation?
-- convert unit tests to use framework (see unit-test.go for how to)
+- IN-PROGRESS - convert unit tests to use framework (see unit-test.go for how to)
 - fix get by id not using owner-id (resource store)
 - add an example method in the example resource showing rpc style (vs PATCH)
 - add a bit more detail to Employee in example
@@ -13,3 +13,4 @@
 - figure out how to support https listening
 - maybe convert to workspaces if it eliminates the need for go.mod aliasing when on local machine
 - cache busting required? For healthchecks? Other?
+- test with docker - add sample docker instructions to examples

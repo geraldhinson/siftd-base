@@ -29,6 +29,12 @@ type PostgresResourceStoreWithJournal[R any] struct {
 // private methods below here
 func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logger *logrus.Logger) (*PostgresResourceStoreWithJournal[R], error) {
 
+	testR := new(R)
+	// validate that R is a struct that included an embedded ResourceBase struct
+	if _, ok := any(testR).(IResource); !ok {
+		return nil, fmt.Errorf("the type R is not a valid resource type. It is missing an embedded ResourceBase struct")
+	}
+
 	// validate inputs
 	if configuration == nil {
 		return nil, fmt.Errorf("configuration is nil")
@@ -94,6 +100,8 @@ func (store *PostgresResourceStoreWithJournal[R]) HealthCheck() error {
 
 // GetById retrieves a resource by its ID
 func (store *PostgresResourceStoreWithJournal[R]) GetById(id string, resource *R) (int, error) {
+	// validate that R is a struct that includes the ResourceBase struct
+
 	query, params := store.Cmds.GetResourceByIdCommand(id)
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query, params)
@@ -210,6 +218,10 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalMaxClock(maxClock *u
 
 // CreateResource creates a new resource
 func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResource) (IResource, int, error) {
+	//	if _, ok := any(resource).(IResource); !ok {
+	//		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("resource is not a valid resource type")
+	//	}
+
 	now := time.Now().UTC()
 	resourceBase := resource.GetResourceBase()
 	resourceBase.CreatedAt = now
@@ -246,6 +258,10 @@ func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResou
 
 // CreateResource creates a new resource
 func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResource, ownerId string, resourceId string) (IResource, int, error) {
+	//	if _, ok := any(resource).(IResource); !ok {
+	//		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("resource is not a valid resource type")
+	//	}
+
 	// validate that the resource id in the URL matches the resource id in the body and
 	// that the owner id in the URL matches the owner id in the body
 	resourceBase := resource.GetResourceBase()
