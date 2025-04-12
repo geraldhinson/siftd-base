@@ -23,10 +23,16 @@ type KeyStore struct {
 	publicKeys       publicKeyMap
 	privateKeys_test privateKeyMap
 	currentKid_test  string
+	debugLevel       int
 }
 
 func NewFakeKeyStore(configuration *viper.Viper, logger *logrus.Logger) *KeyStore {
-	keyStore := &KeyStore{logger: logger, configuration: configuration}
+	var debugLevel = 0
+	if configuration.GetString(constants.DEBUGSIFTD_AUTH) != "" {
+		debugLevel = configuration.GetInt(constants.DEBUGSIFTD_AUTH)
+	}
+
+	keyStore := &KeyStore{logger: logger, configuration: configuration, debugLevel: debugLevel}
 	keyStore.publicKeys = make(publicKeyMap)
 	keyStore.privateKeys_test = make(privateKeyMap)
 
@@ -133,6 +139,9 @@ func (k *KeyStore) generatePrivPubKeys() {
 
 	// create kid for lookup of keys
 	k.currentKid_test = uuid.New().String()
+	if k.debugLevel > 0 {
+		k.logger.Infof("FakeKeyStore: the key id for private/public key pair generated is: %s", k.currentKid_test)
+	}
 
 	var privateKeyMap RSAPrivateKey
 	//	privateKeyMap.kid = k.currentKid_test

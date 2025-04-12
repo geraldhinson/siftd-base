@@ -28,9 +28,8 @@ type PostgresResourceStoreWithJournal[R any] struct {
 
 // private methods below here
 func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logger *logrus.Logger) (*PostgresResourceStoreWithJournal[R], error) {
-
-	testR := new(R)
 	// validate that R is a struct that included an embedded ResourceBase struct
+	testR := new(R)
 	if _, ok := any(testR).(IResource); !ok {
 		return nil, fmt.Errorf("the type R is not a valid resource type. It is missing an embedded ResourceBase struct")
 	}

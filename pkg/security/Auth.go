@@ -93,6 +93,16 @@ func (a *AuthModel) AddPolicy(realm string, authType AuthTypes, authTimeout Auth
 		} else {
 			return fmt.Errorf("Invalid policy - NO_AUTH can only be used with NO_REALM and NO_EXPIRY")
 		}
+	} else {
+		if len(*a.authPolicy) > 0 {
+			// loop throught them to see if any of the preexisting policies NO_AUTH?
+			for _, policy := range *a.authPolicy {
+				if policy.AuthType == NO_AUTH {
+					return fmt.Errorf("Invalid policy - NO_AUTH cannot be used with any other policies")
+				}
+			}
+			// if we get here, then we are good to go
+		}
 	}
 
 	// APPROVED_GROUPS and APPROVED_IDENTITIES must have a non-empty list
@@ -101,7 +111,7 @@ func (a *AuthModel) AddPolicy(realm string, authType AuthTypes, authTimeout Auth
 	}
 
 	// if not APPROVED_GROUPS or APPROVED_IDENTITIES, the list must be empty
-	if (authType != APPROVED_GROUPS && authType != APPROVED_IDENTITIES) && len(list) > 0 {
+	if (authType != APPROVED_GROUPS && authType != APPROVED_IDENTITIES) && list != nil {
 		return fmt.Errorf("Invalid policy - the approved list is only valid when specifying APPROVED_GROUPS or APPROVED_IDENTITIES")
 	}
 
@@ -114,12 +124,19 @@ func (a *AuthModel) AddPolicy(realm string, authType AuthTypes, authTimeout Auth
 		}
 	}
 
+	// TODO: there are some other combos that don't makes sense to use together that I should prevent here
+	// For example, VALID_IDENTITY should not be used with others that require more than just a valid identity
+
 	*a.authPolicy = append(*a.authPolicy, AuthPolicy{Realm: realm, AuthType: authType, AuthTimeout: authTimeout, Listed: list})
 
 	return nil
 }
 
 func (a *AuthModel) jwtAuthNCallback(token *jwt.Token) (interface{}, error) {
+	if a.debugLevel > 0 {
+		a.Logger.Infof("entering jwtAuthNCallback")
+	}
+
 	// Return the key for validation (replace with your actual key)
 	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -131,9 +148,9 @@ func (a *AuthModel) jwtAuthNCallback(token *jwt.Token) (interface{}, error) {
 	}
 	// check if iat was issue over our configured expiry time above
 	// find an authPolicy that matches the realm and use the authTimeout from it
-	var timeout int
+	var timeout = 0
 	for _, policy := range *a.authPolicy {
-		if policy.Realm == token.Claims.(jwt.MapClaims)["realm"] {
+		if policy.Realm == token.Claims.(jwt.MapClaims)["sub_type"] {
 			timeout = int(policy.AuthTimeout)
 			break
 		}
@@ -158,7 +175,7 @@ func (a *AuthModel) jwtAuthNCallback(token *jwt.Token) (interface{}, error) {
 
 func (a *AuthModel) jwtAuthZCallback(token *jwt.Token, r *http.Request) (bool, int) {
 	if a.debugLevel > 0 {
-		a.Logger.Infof("AuthZ Callback - token: %v", token)
+		a.Logger.Infof("entering jwtAuthZCallback")
 	}
 
 	// there must be a policy in the array
@@ -275,8 +292,8 @@ func (a *AuthModel) jwtAuthZCallback(token *jwt.Token, r *http.Request) (bool, i
 		}
 	}
 
-	// Default to unauthorized
-	return false, http.StatusUnauthorized
+	// Default to forbidden if no policies matched
+	return false, http.StatusForbidden
 }
 
 func (a *AuthModel) ValidateSecurity(w http.ResponseWriter, r *http.Request) bool {
@@ -338,6 +355,9 @@ func (a *AuthModel) Secure(nakedFunc http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		if a.debugLevel > 0 {
+			a.Logger.Infof("Passed security checks - continuing the call to 'naked' function")
+		}
 		// Passed security checks - now call the router function we protected
 		nakedFunc(w, r)
 	}
