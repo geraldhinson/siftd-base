@@ -1,7 +1,9 @@
 - resolve TODOs in source files
 - create localized strings file
+- add a listen method to serviceBase that uses the srv.Listen model and that also supports graceful shutdown (signals, secured rest msg, or both)
+- figure out how to support https listening
 - add updatedBy to service base
-- add support for impoersonation?
+- add support for impersonation?
 - IN-PROGRESS - convert unit tests to use framework (see unit-test.go for how to)
 - fix get by id not using owner-id (resource store)
 - add an example method in the example resource showing rpc style (vs PATCH)
@@ -10,7 +12,7 @@
 - DONE - convert query service to new model like example resource
 - clean up info logging in query service 
 - DONE - start using git/github vs zipped in dropbox
-- figure out how to support https listening
 - maybe convert to workspaces if it eliminates the need for go.mod aliasing when on local machine
 - cache busting required? For healthchecks? Other?
 - test with docker - add sample docker instructions to examples
+- did I force the clock and limit on getjournalchanges to be valid values?

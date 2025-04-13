@@ -1,9 +1,12 @@
 package serviceBase
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/geraldhinson/siftd-base/pkg/security"
@@ -87,24 +90,57 @@ func setup() (*logrus.Logger, *viper.Viper) {
 	return logger, configuration
 }
 
+func (sb *ServiceBase) ListenAndServe() {
+	listenAddress := sb.Configuration.GetString(constants.LISTEN_ADDRESS)
+	if listenAddress == "" {
+		sb.Logger.Fatalf("Unable to retrieve listen address and port. Shutting down.")
+		return
+	}
+
+	server := &http.Server{
+		Addr:    listenAddress,
+		Handler: sb.Router,
+	}
+
+	go func() {
+		sb.Logger.Printf("Starting HTTP server on %s", listenAddress)
+
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			sb.Logger.Fatalf("HTTP server error: %v", err)
+		}
+
+		sb.Logger.Println("Stopped serving new connections.")
+	}()
+
+	//	sigChan := make(chan os.Signal, 1)
+	//	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	//	<-sigChan
+
+	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownRelease()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		sb.Logger.Fatalf("HTTP shutdown error: %v", err)
+	}
+	sb.Logger.Println("Graceful shutdown complete.")
+}
+
 // convenience function to simplify the call to the actual NewAuthModel (in Auth.go)
 //
 // Example usage from a service:
 //
-//   authModel, err := NewAuthModel(security.REALM_MEMBER, security.MATCHING_IDENTITY, security.ONE_DAY, nil)
+//	authModel, err := NewAuthModel(security.REALM_MEMBER, security.MATCHING_IDENTITY, security.ONE_DAY, nil)
 //
 // To add additional policies to the authModel, use the AddPolicy method (note that the AddPolicy calls are done on the returned authModel):
 //
-//   err = authModel.AddPolicy(security.REALM_MEMBER, security.APPROVED_GROUPS, security.ONE_DAY, []string{"admin"})
-//   err = authModel.AddPolicy(security.REALM_MEMBER, security.APPROVED_IDENTITIES, security.ONE_DAY, []string{"GUID-fake-member-GUID"})
-//   err = authModel.AddPolicy(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
+//	err = authModel.AddPolicy(security.REALM_MEMBER, security.APPROVED_GROUPS, security.ONE_DAY, []string{"admin"})
+//	err = authModel.AddPolicy(security.REALM_MEMBER, security.APPROVED_IDENTITIES, security.ONE_DAY, []string{"GUID-fake-member-GUID"})
+//	err = authModel.AddPolicy(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
 //
 // You can also call NewAuthModel multiple times if you want to create differing auth models for different routes.
 // For example you mght want to secure routes that are only available to admins or members of a given realm.
 //
-//   authModel, err := NewAuthModel(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
-//
-
+//	authModel, err := NewAuthModel(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
 func (sb *ServiceBase) NewAuthModel(realm string, authType security.AuthTypes, authTimeout security.AuthTimeout, list []string) (*security.AuthModel, error) {
 
 	authModel := security.NewAuthModel(sb.Configuration, sb.Logger, sb.KeyCache)
