@@ -1,6 +1,6 @@
 - resolve TODOs in source files
 - create localized strings file
-- add a listen method to serviceBase that uses the srv.Listen model and that also supports graceful shutdown (signals, secured rest msg, or both)
+- DONE - add a listen method to serviceBase that uses the srv.Listen model and that also supports graceful shutdown (signals, secured rest msg, or both)
 - figure out how to support https listening
 - add updatedBy to service base
 - add support for impersonation?
@@ -16,3 +16,4 @@
 - cache busting required? For healthchecks? Other?
 - test with docker - add sample docker instructions to examples
 - did I force the clock and limit on getjournalchanges to be valid values?
+- HALF-DONE: convert both examples to use the servicebase listen

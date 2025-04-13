@@ -1,0 +1,1 @@
+go test -v --cover -coverpkg=github.com/geraldhinson/siftd-base/pkg/resourceStore,github.com/geraldhinson/siftd-base/pkg/security,github.com/geraldhinson/siftd-base/pkg/serviceBase,github.com/geraldhinson/siftd-base/pkg/helpers -coverprofile=coverage.out
