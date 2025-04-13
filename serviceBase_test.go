@@ -94,11 +94,12 @@ func TestServiceBase_InstantiateAndCalls(t *testing.T) {
 				t.Fatalf("Failed to unmarshal array of journal entries response: %v", err)
 			}
 			if len(journaled) == 0 {
-				t.Fatalf("got no journalex responses back when expecting more than 1 in array")
+				t.Fatalf("got no journal responses back when expecting more than 1 in array")
 			}
 		}
 
 		// journal call to get max clock - valid
+		var maxClock resourceStore.JournalMaxClock
 		requestURL = "v1/journalMaxClock"
 		body, err, status = shared.CallServiceViaLoopback(router.Configuration, http.MethodGet, fakeMachineToken, requestURL)
 		if err != nil {
@@ -109,16 +110,38 @@ func TestServiceBase_InstantiateAndCalls(t *testing.T) {
 		} else {
 			fmt.Printf("Response body: %s\n", string(body))
 
-			type TheClock struct {
-				MaxClock uint64 `json:"maxClock"`
-			}
-			var maxClock TheClock
 			err = json.Unmarshal(body, &maxClock)
 			if err != nil {
 				t.Fatalf("Failed to unmarshal max clock from noun journal: %v", err)
 			}
 			if maxClock.MaxClock == 0 {
 				t.Fatalf("got 0 max clock when expecting a number > 0")
+			}
+		}
+
+		// journal call to get the max clock entry only - valid
+		requestURL = fmt.Sprintf("v1/journal?clock=%d&limit=1", maxClock.MaxClock)
+		body, err, status = shared.CallServiceViaLoopback(router.Configuration, http.MethodGet, fakeMachineToken, requestURL)
+		if err != nil {
+			t.Fatalf("Failed to call noun-journal router via loopback: %v, %d", err, status)
+		}
+		if status != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d", http.StatusOK, status)
+		} else {
+			fmt.Printf("Response body: %s\n", string(body))
+			var journaled []resourceStore.ResourceJournalEntry
+			err = json.Unmarshal(body, &journaled)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal array of journal entries response: %v", err)
+			}
+			if len(journaled) == 0 {
+				t.Fatalf("got no journal responses back when expecting 1 in array")
+			}
+			if len(journaled) > 1 {
+				t.Fatalf("got more then one journal responses back when expecting exactly 1 in array")
+			}
+			if journaled[0].Clock != maxClock.MaxClock {
+				t.Fatalf("got clock %d when expecting %d", journaled[0].Clock, maxClock.MaxClock)
 			}
 		}
 

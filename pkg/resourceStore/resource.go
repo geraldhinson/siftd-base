@@ -30,6 +30,10 @@ type ResourceJournalEntry struct {
 	PartitionName string          `json:"partitionName"`
 }
 
+type JournalMaxClock struct {
+	MaxClock uint64 `json:"maxClock"`
+}
+
 /*
 type ResourceJournalEntry struct {
 	Clock         uint64
