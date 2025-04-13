@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
@@ -102,6 +104,7 @@ func (sb *ServiceBase) ListenAndServe() {
 		Handler: sb.Router,
 	}
 
+	sb.Logger.Printf("before go func")
 	go func() {
 		sb.Logger.Printf("Starting HTTP server on %s", listenAddress)
 
@@ -111,10 +114,15 @@ func (sb *ServiceBase) ListenAndServe() {
 
 		sb.Logger.Println("Stopped serving new connections.")
 	}()
+	sb.Logger.Printf("after go func")
 
-	//	sigChan := make(chan os.Signal, 1)
-	//	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	//	<-sigChan
+	sb.Logger.Printf("before signal wait")
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+
+	sb.Logger.Printf("after signal wait")
 
 	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownRelease()

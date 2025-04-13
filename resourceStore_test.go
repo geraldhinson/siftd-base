@@ -1,6 +1,7 @@
 package unittests
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -630,7 +631,8 @@ func TestGetJournalChanges(t *testing.T) {
 		}
 
 		// simple validation of json marshalling of a journal entry
-		jsonBytes, err := journalEntries[0].MarshalJSON()
+		jsonBytes, err := json.Marshal(journalEntries[0])
+		//		jsonBytes, err := journalEntries[0].MarshalJSON()	// test without, then delete this
 		if err != nil {
 			t.Errorf("Error marshaling journal entry to JSON: %v", err)
 			return

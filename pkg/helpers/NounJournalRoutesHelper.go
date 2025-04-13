@@ -55,6 +55,8 @@ func (j *NounJournalRoutesHelper[R]) setupRoutes(authModel *security.AuthModel) 
 
 func (j *NounJournalRoutesHelper[R]) GetJournalChanges(w http.ResponseWriter, r *http.Request) {
 
+	// TODO: do some validity checks on the clock and limit values passed (e.g. clock > 0, limit > 0)
+
 	params := j.GetQueryParams(r)
 	clock, err := strconv.ParseInt(params["clock"], 10, 64)
 	if err != nil {

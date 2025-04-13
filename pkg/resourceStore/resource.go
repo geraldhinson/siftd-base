@@ -24,6 +24,14 @@ type IResource interface {
 }
 
 type ResourceJournalEntry struct {
+	Clock         uint64          `json:"clock"`
+	Resource      json.RawMessage `json:"resource"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	PartitionName string          `json:"partitionName"`
+}
+
+/*
+type ResourceJournalEntry struct {
 	Clock         uint64
 	Resource      []byte
 	CreatedAt     time.Time
@@ -45,3 +53,4 @@ func (rj ResourceJournalEntry) MarshalJSON() ([]byte, error) {
 	// Marshal the map to JSON
 	return json.Marshal(result)
 }
+*/

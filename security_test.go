@@ -4,19 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
-	"github.com/geraldhinson/siftd-base/pkg/helpers"
 	"github.com/geraldhinson/siftd-base/pkg/resourceStore"
 	"github.com/geraldhinson/siftd-base/pkg/security"
 	"github.com/geraldhinson/siftd-base/pkg/serviceBase"
+	shared "github.com/geraldhinson/siftd-base/pkg/unitTestsShared"
 	"github.com/gorilla/mux"
-	"github.com/spf13/viper"
 )
 
 type fakeNoun struct {
@@ -36,18 +34,18 @@ type UnitTestRouter struct {
 }
 
 func (ur *UnitTestRouter) testNounHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("GET request received with Auth token: %s\n", r.Header.Get("Authorization"))
-	fmt.Printf("GET request received with URL: %s\n", r.URL.Path)
-
 	params := mux.Vars(r)
-	urlEmployee := params["employeeId"]
 	urlIdentity := params["identityId"]
-	fmt.Printf("GET request received with employeeId: %s\n", urlEmployee)
 	fmt.Printf("GET request received with identityId: %s\n", urlIdentity)
+
+	queryParams := ur.GetQueryParams(r)
+	fmt.Printf("GET request received with query params: %v\n", queryParams)
+
+	// ignoring query params in this test
 
 	resourceA := &fakeNounResource{
 		ResourceBase: resourceStore.ResourceBase{OwnerId: "1234"},
-		FakeNoun:     fakeNoun{Name: "Alice", Age: 30},
+		FakeNoun:     fakeNoun{Name: "Alice", Age: 100},
 	}
 	responseBytes, err := json.Marshal(resourceA)
 	if err != nil {
@@ -149,7 +147,7 @@ func TestNounHandler_NoAuth(t *testing.T) {
 
 	t.Run("GET request", func(t *testing.T) {
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, nil, "GUID-fake-member-GUID")
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, nil, "GUID-fake-member-GUID", "AgeOver=10")
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -177,7 +175,7 @@ func TestNounHandler_RealmValidIdentity_ExpiredToken(t *testing.T) {
 		expiredToken := "eyJhbGciOiJSUzI1NiIsImtpZCI6ImY3M2IxOWEwLWZhZjktNGJmNS04MWUyLTE4NjY5Zjg1MTNjNiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NDQyNDk3MTMsImlzcyI6InNpZnRkLXNlcnZpY2UtYmFzZSIsImp0aSI6ImI4MTZiMjA3LWZlMjYtNDVkNi04YTlhLWZmNWU1Y2M0NWI5NiIsInJvbGVzIjpbImFkbWluIl0sInN1YiI6IkdVSUQtZmFrZS1tZW1iZXItR1VJRCIsInN1Yl9uYW1lIjoiRmFrZSAoTWVtYmVyKSBVc2VyIiwic3ViX3R5cGUiOiJNZW1iZXIifQ.Y0okgVgWujtc7PNpILKqTeUh-yvAi5QGkHpmalmVPTFzBK5fId0FRGxnbBDZ2Ds0U8VkusStVOsyCw0xkGeDYhxUKo8p7V_Sg2pxa1YS31a9xPHPxNrdEHNOk5ZvTciwicGvVAMmb2XUnliz49RKDm9T0skmW8I35vRyA03hxARyRl5a6xqezWHYj1OQbdKHf3ftYIWbGvjbNKdF0FcwGcX-nvmfUaFtOwIjQUe-_YVHRFI06vKNYf-cHqhIWHFl-TNFKQbtyTlxHVVwJ3IGxCOoAA_boU6rJLjfcxcmDVzAKxm0c0JatTky3kcTOeDj_wnQV8umrtxMQ5jvJkpPGQ"
 		expiredTokenBytes := []byte(expiredToken)
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, expiredTokenBytes, "GUID-fake-member-GUID")
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, expiredTokenBytes, "GUID-fake-member-GUID", "AgeOver=10")
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -199,12 +197,12 @@ func TestNounHandler_RealmValidIdentity_ValidToken(t *testing.T) {
 	defer router.httpServer.Shutdown(context.Background())
 
 	t.Run("GET request", func(t *testing.T) {
-		fakeUserToken, err := CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
+		fakeUserToken, err := shared.CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
 		if err != nil {
 			t.Fatalf("failed to get fake user token: %s", err)
 		}
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "GUID-fake-member-GUID")
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "GUID-fake-member-GUID", "AgeOver=10")
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -229,12 +227,12 @@ func TestNounHandler_RealmMatchingIdentity_InvalidToken(t *testing.T) {
 	defer router.httpServer.Shutdown(context.Background())
 
 	t.Run("GET request", func(t *testing.T) {
-		fakeUserToken, err := CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
+		fakeUserToken, err := shared.CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
 		if err != nil {
 			t.Fatalf("failed to get fake user token: %s", err)
 		}
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "diffent-identy-from-token") // NOT the same as on token from fake identity service
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "diffent-identy-from-token", "AgeOver=10") // NOT the same as on token from fake identity service
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -256,12 +254,12 @@ func TestNounHandler_RealmMatchingIdentity_ValidToken(t *testing.T) {
 	defer router.httpServer.Shutdown(context.Background())
 
 	t.Run("GET request", func(t *testing.T) {
-		fakeUserToken, err := CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
+		fakeUserToken, err := shared.CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
 		if err != nil {
 			t.Fatalf("failed to get fake user token: %s", err)
 		}
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "GUID-fake-member-GUID") // same as on token from fake identity service
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "GUID-fake-member-GUID", "AgeOver=10") // same as on token from fake identity service
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -284,12 +282,12 @@ func TestNounHandler_RealmApprovedIdentities_InList(t *testing.T) {
 	defer router.httpServer.Shutdown(context.Background())
 
 	t.Run("GET request", func(t *testing.T) {
-		fakeUserToken, err := CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
+		fakeUserToken, err := shared.CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
 		if err != nil {
 			t.Fatalf("failed to get fake user token: %s", err)
 		}
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "different-identity") // not as on token from fake identity service
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "different-identity", "AgeOver=10") // not as on token from fake identity service
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -311,12 +309,12 @@ func TestNounHandler_RealmApprovedIdentities_NotInList(t *testing.T) {
 	defer router.httpServer.Shutdown(context.Background())
 
 	t.Run("GET request", func(t *testing.T) {
-		fakeUserToken, err := CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
+		fakeUserToken, err := shared.CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
 		if err != nil {
 			t.Fatalf("failed to get fake user token: %s", err)
 		}
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "Joe Bob") // NOT the same as on token from fake identity service
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "Joe Bob", "AgeOver=10") // NOT the same as on token from fake identity service
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -337,12 +335,12 @@ func TestNounHandler_RealmApprovedGroups_IsGroupMember(t *testing.T) {
 	defer router.httpServer.Shutdown(context.Background())
 
 	t.Run("GET request", func(t *testing.T) {
-		fakeUserToken, err := CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
+		fakeUserToken, err := shared.CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
 		if err != nil {
 			t.Fatalf("failed to get fake user token: %s", err)
 		}
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "different-identity") // not as on token from fake identity service
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "different-identity", "AgeOver=10") // not as on token from fake identity service
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -364,12 +362,12 @@ func TestNounHandler_RealmApprovedGroups_IsNotGroupMember(t *testing.T) {
 	defer router.httpServer.Shutdown(context.Background())
 
 	t.Run("GET request", func(t *testing.T) {
-		fakeUserToken, err := CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
+		fakeUserToken, err := shared.CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, true)
 		if err != nil {
 			t.Fatalf("failed to get fake user token: %s", err)
 		}
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "Joe Bob") // NOT the same as on token from fake identity service
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "Joe Bob", "AgeOver=10") // NOT the same as on token from fake identity service
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -391,12 +389,12 @@ func TestNounHandler_RealmMachine_ValidIdentity(t *testing.T) {
 
 	t.Run("GET request", func(t *testing.T) {
 		var isUserIdentity = false
-		fakeUserToken, err := CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, isUserIdentity)
+		fakeUserToken, err := shared.CallFakeIdentityServiceViaLoopbackToGetToken(router.Configuration, isUserIdentity)
 		if err != nil {
 			t.Fatalf("failed to get fake machine realm token: %s", err)
 		}
 
-		body, err, status := CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "different-identity") // not as on token from fake identity service
+		body, err, status := shared.CallNounRouterViaLoopback(router.Configuration, fakeUserToken, "different-identity", "AgeOver=10") // not as on token from fake identity service
 		if err != nil {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
@@ -413,80 +411,6 @@ func TestNounHandler_RealmMachine_ValidIdentity(t *testing.T) {
 //-----
 //----- Test support Functions below here
 //-----
-
-func CallNounRouterViaLoopback(configuration *viper.Viper, fakeUserToken []byte, identity string) ([]byte, error, int) {
-
-	listenAddress := configuration.GetString(constants.LISTEN_ADDRESS)
-	if listenAddress == "" {
-		err := fmt.Errorf("Unable to retrieve listen address and port. Shutting down.")
-		return nil, err, http.StatusBadRequest
-	}
-
-	requestURL := fmt.Sprintf("http://%s/v1/identities/%s/employees/fake-EMPLOYEE-GUID-fake", listenAddress, identity)
-	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
-	if err != nil {
-		err = fmt.Errorf("failed to build noun service request in KeyCache: %s", err)
-		return nil, err, http.StatusBadRequest
-	}
-	if (fakeUserToken != nil) && (len(fakeUserToken) > 0) {
-		req.Header.Add("Authorization", string(fakeUserToken))
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		err = fmt.Errorf("client call to noun service failed with : %s", err)
-		return nil, err, http.StatusBadRequest
-	}
-
-	resBody, err := io.ReadAll(res.Body)
-	if err != nil {
-		err = fmt.Errorf("unable to read noun service reply: %s", err)
-		return nil, err, http.StatusBadRequest
-	}
-
-	return resBody, err, res.StatusCode
-}
-
-func CallFakeIdentityServiceViaLoopbackToGetToken(configuration *viper.Viper, userToken bool) ([]byte, error) {
-
-	listenAddress := configuration.GetString(constants.LISTEN_ADDRESS)
-	if listenAddress == "" {
-		err := fmt.Errorf("Unable to retrieve listen address and port. Shutting down.")
-		return nil, err
-	}
-
-	var requestURL string
-	if userToken {
-		requestURL = fmt.Sprintf("http://%s/v1/createFakeUserToken", listenAddress)
-	} else {
-		requestURL = fmt.Sprintf("http://%s/v1/createFakeMachineToken", listenAddress)
-	}
-	req, err := http.NewRequest(http.MethodPost, requestURL, nil)
-	if err != nil {
-		err = fmt.Errorf("failed to build identity service request in KeyCache: %s", err)
-		return nil, err
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		err = fmt.Errorf("client call to identity service failed with : %s", err)
-		return nil, err
-	}
-
-	resBody, err := io.ReadAll(res.Body)
-	if err != nil {
-		err = fmt.Errorf("unable to read identity service reply: %s", err)
-		return nil, err
-	}
-
-	if res.StatusCode != http.StatusOK {
-		err = fmt.Errorf("identity service returned status code: %d", res.StatusCode)
-		return nil, err
-	}
-
-	// resBody is the public key, return it
-	return resBody, nil
-}
 
 func Listener(service *serviceBase.ServiceBase) (*http.Server, error) {
 
@@ -543,10 +467,10 @@ func NewUnitTestRouter(realm string, authType security.AuthTypes, authTimeout se
 		return nil, fmt.Errorf("Failed to initialize AuthModel in HealthCheckRouter : %v", err)
 	}
 
-	var routeString = "/v1/identities/{identityId}/employees/{employeeId}"
+	var routeString = "/v1/identities/{identityId}/employees"
 	unitTestRouter.RegisterRoute(constants.HTTP_GET, routeString, authModel, unitTestRouter.testNounHandler)
 
-	FakeIdentityServiceRouter := NewFakeIdentityServiceRouter(service)
+	FakeIdentityServiceRouter := shared.NewFakeIdentityServiceRouter(service)
 	if FakeIdentityServiceRouter == nil {
 		return nil, fmt.Errorf("Failed to create fake identity service api server (for testing only). Shutting down.")
 	}
@@ -558,40 +482,4 @@ func NewUnitTestRouter(realm string, authType security.AuthTypes, authTimeout se
 
 	return unitTestRouter, nil
 
-}
-
-// this is here to enable the plumbing to call this same process back via loopback to get tokens, fetch public keys, etc.
-// It is testing separately with the other helpers the service_test.go file
-type FakeIdentityServiceRouter struct {
-	*helpers.FakeIdentityServiceRoutesHelper
-}
-
-func NewFakeIdentityServiceRouter(employeeService *serviceBase.ServiceBase) *FakeIdentityServiceRouter {
-	employeeService.Logger.Info("Setting up the fake identity service router")
-
-	// This router is mostly built using serviceBase implementation, but we don't fully implement it in
-	// serviceBase because:
-	// 1. We want it to be obvious that it is one of the routers this service implements (ie.
-	//    easily seen in the routers folder)
-	// 2. It is important for the service writer to define the auth model for all routers
-	//
-	authModel, err := employeeService.NewAuthModel(security.NO_REALM, security.NO_AUTH, security.NO_EXPIRY, nil)
-	if err != nil {
-		employeeService.Logger.Fatalf("Failed to initialize AuthModel in FakeIdentityServiceRouter : %v", err)
-		return nil
-	}
-
-	// OK. Auth is defined. Now use the helper code to do the rest of the heavy lifting here.
-	//
-	FakeIdentityServiceRoutesHelper := helpers.NewFakeIdentityServiceRoutesHelper(employeeService, authModel)
-	if FakeIdentityServiceRoutesHelper == nil {
-		employeeService.Logger.Println("Error creating FakeIdentityServiceRoutesHelper")
-		return nil
-	}
-
-	FakeIdentityServiceRouter := &FakeIdentityServiceRouter{
-		FakeIdentityServiceRoutesHelper: FakeIdentityServiceRoutesHelper,
-	}
-
-	return FakeIdentityServiceRouter
 }
