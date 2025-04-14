@@ -97,17 +97,17 @@ func NewTestRouter(realm string, authType security.AuthTypes, authTimeout securi
 	var routeString = "/v1/identities/{identityId}/employees"
 	service.RegisterRoute(constants.HTTP_GET, routeString, authModel, testRouter.testNounHandler)
 
-	FakeIdentityServiceRouter := NewFakeIdentityServiceRouter(service)
+	FakeIdentityServiceRouter := helpers.NewFakeIdentityServiceRouter(service, security.NO_REALM, security.NO_AUTH, security.NO_EXPIRY, nil)
 	if FakeIdentityServiceRouter == nil {
 		return nil, fmt.Errorf("Failed to create fake identity service api server (for testing only). Shutting down.")
 	}
 
-	NounJournalRouter := NewNounJournalRouter(service)
+	NounJournalRouter := helpers.NewNounJournalRouter[TestNounResource](service, security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
 	if NounJournalRouter == nil {
 		return nil, fmt.Errorf("Failed to create journal api server (for testing only). Shutting down.")
 	}
 
-	HealthCheckRouter := NewHealthCheckRouter(service)
+	HealthCheckRouter := helpers.NewNounHealthCheckRouter[TestNounResource](service, security.NO_REALM, security.NO_AUTH, security.NO_EXPIRY, nil)
 	if HealthCheckRouter == nil {
 		return nil, fmt.Errorf("Failed to create health check api server (for testing only). Shutting down.")
 	}
@@ -168,6 +168,7 @@ func CallFakeIdentityServiceViaLoopbackToGetToken(configuration *viper.Viper, us
 	return resbody, err
 }
 
+/*
 // this is here to enable the plumbing to call this same process back via loopback to get tokens, fetch public keys, etc.
 // It is testing separately with the other helpers the service_test.go file
 type FakeIdentityServiceRouter struct {
@@ -203,7 +204,9 @@ func NewFakeIdentityServiceRouter(employeeService *serviceBase.ServiceBase) *Fak
 
 	return FakeIdentityServiceRouter
 }
+*/
 
+/*
 type HealthCheckRouter struct {
 	*helpers.HealthCheckRoutesHelper[TestNounResource]
 }
@@ -237,7 +240,8 @@ func NewHealthCheckRouter(employeeService *serviceBase.ServiceBase) *HealthCheck
 
 	return HealthCheckServiceRouter
 }
-
+*/
+/*
 type NounJournalRouter struct {
 	*helpers.NounJournalRoutesHelper[TestNounResource]
 }
@@ -271,3 +275,4 @@ func NewNounJournalRouter(employeeService *serviceBase.ServiceBase) *NounJournal
 
 	return NounJournalServiceRouter
 }
+*/

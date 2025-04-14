@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/helpers"
 	"github.com/geraldhinson/siftd-base/pkg/resourceStore"
 	"github.com/geraldhinson/siftd-base/pkg/security"
 	"github.com/geraldhinson/siftd-base/pkg/serviceBase"
@@ -470,7 +471,7 @@ func NewUnitTestRouter(realm string, authType security.AuthTypes, authTimeout se
 	var routeString = "/v1/identities/{identityId}/employees"
 	unitTestRouter.RegisterRoute(constants.HTTP_GET, routeString, authModel, unitTestRouter.testNounHandler)
 
-	FakeIdentityServiceRouter := shared.NewFakeIdentityServiceRouter(service)
+	FakeIdentityServiceRouter := helpers.NewFakeIdentityServiceRouter(service, security.NO_REALM, security.NO_AUTH, security.NO_EXPIRY, nil)
 	if FakeIdentityServiceRouter == nil {
 		return nil, fmt.Errorf("Failed to create fake identity service api server (for testing only). Shutting down.")
 	}

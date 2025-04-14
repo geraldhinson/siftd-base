@@ -13,34 +13,45 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type FakeIdentityServiceRoutesHelper struct {
+type FakeIdentityServiceRouter struct {
 	*serviceBase.ServiceBase
 	FakeKeyStore *security.KeyStore
 }
 
-func NewFakeIdentityServiceRoutesHelper(serviceBase *serviceBase.ServiceBase, authModel *security.AuthModel) *FakeIdentityServiceRoutesHelper {
+func NewFakeIdentityServiceRouter(
+	serviceBase *serviceBase.ServiceBase,
+	realm string,
+	authType security.AuthTypes,
+	timeout security.AuthTimeout,
+	approvedList []string) *FakeIdentityServiceRouter {
 
 	fakeKeyStore := security.NewFakeKeyStore(serviceBase.Configuration, serviceBase.Logger)
 	if fakeKeyStore == nil {
-		serviceBase.Logger.Println("Error creating FakeKeyStore")
+		serviceBase.Logger.Println("Error creating FakeKeyStore in default FakeIdentityServiceRouter")
 		return nil
 	}
 
-	FakeIdentityServiceHelper := &FakeIdentityServiceRoutesHelper{
+	authModel, err := serviceBase.NewAuthModel(realm, authType, timeout, approvedList)
+	if err != nil {
+		serviceBase.Logger.Fatalf("Failed to initialize AuthModel in default HealthCheckRouter : %v", err)
+		return nil
+	}
+
+	fakeIdentityServiceRouter := &FakeIdentityServiceRouter{
 		ServiceBase:  serviceBase,
 		FakeKeyStore: fakeKeyStore,
 	}
 
-	FakeIdentityServiceHelper.setupRoutes(authModel)
-	if FakeIdentityServiceHelper.Router == nil {
-		serviceBase.Logger.Println("Error creating FakeIdentityServiceHelper")
+	fakeIdentityServiceRouter.setupRoutes(authModel)
+	if fakeIdentityServiceRouter.Router == nil {
+		serviceBase.Logger.Println("Error creating FakeIdentityServiceHelper in default FakeIdentityServiceRouter")
 		return nil
 	}
 
-	return FakeIdentityServiceHelper
+	return fakeIdentityServiceRouter
 }
 
-func (k *FakeIdentityServiceRoutesHelper) setupRoutes(authModel *security.AuthModel) {
+func (k *FakeIdentityServiceRouter) setupRoutes(authModel *security.AuthModel) {
 	var routeString = "/v1/createFakeUserToken"
 	k.RegisterRoute(constants.HTTP_POST, routeString, authModel, k.handleFakeUserLogin)
 
@@ -52,7 +63,7 @@ func (k *FakeIdentityServiceRoutesHelper) setupRoutes(authModel *security.AuthMo
 
 }
 
-func (k *FakeIdentityServiceRoutesHelper) handleFakeUserLogin(w http.ResponseWriter, r *http.Request) {
+func (k *FakeIdentityServiceRouter) handleFakeUserLogin(w http.ResponseWriter, r *http.Request) {
 	k.Logger.Infof("Incoming request to create a fake user login token (for testing): %s", r.URL.Path)
 
 	token, err := k.FakeKeyStore.JwtFakeUserLogin()
@@ -64,7 +75,7 @@ func (k *FakeIdentityServiceRoutesHelper) handleFakeUserLogin(w http.ResponseWri
 	k.WriteHttpOK(w, token)
 }
 
-func (k *FakeIdentityServiceRoutesHelper) handleFakeServiceLogin(w http.ResponseWriter, r *http.Request) {
+func (k *FakeIdentityServiceRouter) handleFakeServiceLogin(w http.ResponseWriter, r *http.Request) {
 	k.Logger.Infof("Incoming request to create a fake machine token (for testing): %s", r.URL.Path)
 
 	token, err := k.FakeKeyStore.JwtFakeServiceLogin()
@@ -76,7 +87,7 @@ func (k *FakeIdentityServiceRoutesHelper) handleFakeServiceLogin(w http.Response
 	k.WriteHttpOK(w, token)
 }
 
-func (k *FakeIdentityServiceRoutesHelper) handleFakeGetPublicKey(w http.ResponseWriter, r *http.Request) {
+func (k *FakeIdentityServiceRouter) handleFakeGetPublicKey(w http.ResponseWriter, r *http.Request) {
 	k.Logger.Infof("Incoming request to get a public key by id(for testing): %s", r.URL.Path)
 	params := mux.Vars(r)
 	kid := params["keyId"]

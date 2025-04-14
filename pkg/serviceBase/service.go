@@ -29,15 +29,20 @@ type ServiceBase struct {
 	Router        *mux.Router
 	KeyCache      *security.KeyCache
 	HealthStatus  *HealthStatus
+	debugLevel    int
 }
 
 // ValidateConfigAndListen configures the services for the Queries Service and listens for incoming requests
 func NewServiceBase() *ServiceBase {
-
 	logger, configuration := setup()
 	if logger == nil || configuration == nil {
 		fmt.Println("Setup failed for service. Shutting down.")
 		return nil
+	}
+
+	var debugLevel = 0
+	if configuration.GetString(constants.DEBUGSIFTD_AUTH) != "" {
+		debugLevel = configuration.GetInt(constants.DEBUGSIFTD_AUTH)
 	}
 
 	serviceInstanceName := configuration.GetString(constants.SERVICE_INSTANCE_NAME)
@@ -67,6 +72,7 @@ func NewServiceBase() *ServiceBase {
 		Router:        router,
 		KeyCache:      keyCache,
 		HealthStatus:  health,
+		debugLevel:    debugLevel,
 	}
 }
 
@@ -104,25 +110,32 @@ func (sb *ServiceBase) ListenAndServe() {
 		Handler: sb.Router,
 	}
 
-	sb.Logger.Printf("before go func")
+	if sb.debugLevel > 0 {
+		sb.Logger.Printf("Launching 'listen' go routine") // TODO: make these more meaningful and put them under a debug flag
+	}
+
 	go func() {
-		sb.Logger.Printf("Starting HTTP server on %s", listenAddress)
+		sb.Logger.Printf("Inside 'listen' - Starting HTTP server on %s", listenAddress)
 
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			sb.Logger.Fatalf("HTTP server error: %v", err)
 		}
 
-		sb.Logger.Println("Stopped serving new connections.")
+		sb.Logger.Println("Inside 'listen' - Stopped serving new connections.")
 	}()
-	sb.Logger.Printf("after go func")
 
-	sb.Logger.Printf("before signal wait")
+	if sb.debugLevel > 0 {
+		sb.Logger.Printf("Awaiting shutdown signal (SIGINT/SIGTERM)")
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	sb.Logger.Printf("after signal wait")
+	if sb.debugLevel > 0 {
+		sb.Logger.Printf("Received shutdown signal")
+	}
+	sb.Logger.Printf("Shutting down HTTP server on %s", listenAddress)
 
 	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownRelease()
@@ -130,7 +143,10 @@ func (sb *ServiceBase) ListenAndServe() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		sb.Logger.Fatalf("HTTP shutdown error: %v", err)
 	}
-	sb.Logger.Println("Graceful shutdown complete.")
+
+	if sb.debugLevel > 0 {
+		sb.Logger.Printf("HTTP server shutdown complete")
+	}
 }
 
 // convenience function to simplify the call to the actual NewAuthModel (in Auth.go)

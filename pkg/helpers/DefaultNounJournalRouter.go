@@ -15,36 +15,43 @@ import (
 	"github.com/geraldhinson/siftd-base/pkg/serviceBase"
 )
 
-type NounJournalRoutesHelper[R any] struct {
+type NounJournalRouter[R any] struct {
 	*serviceBase.ServiceBase
 	store *resourceStore.PostgresResourceStoreWithJournal[R]
 }
 
-func NewNounJournalRoutesHelper[R any](serviceBase *serviceBase.ServiceBase,
-	authModel *security.AuthModel) *NounJournalRoutesHelper[R] {
+func NewNounJournalRouter[R any](
+	serviceBase *serviceBase.ServiceBase,
+	realm string,
+	authType security.AuthTypes,
+	timeout security.AuthTimeout,
+	approvedList []string) *NounJournalRouter[R] {
+
+	authModel, err := serviceBase.NewAuthModel(realm, authType, timeout, approvedList)
+	if err != nil {
+		serviceBase.Logger.Fatalf("Failed to initialize AuthModel in default NounJournalRouter : %v", err)
+		return nil
+	}
 
 	store, err := resourceStore.NewPostgresResourceStoreWithJournal[R](
 		serviceBase.Configuration,
 		serviceBase.Logger)
 	if err != nil {
-		serviceBase.Logger.Println("Error creating PostgresResourceStoreWithJournal:", err)
+		serviceBase.Logger.Println("Error creating PostgresResourceStoreWithJournal in default NounJournalRouter:", err)
 		return nil
 	}
 
-	nounJournalRoutesHelper := &NounJournalRoutesHelper[R]{
+	nounJournalRouter := &NounJournalRouter[R]{
 		ServiceBase: serviceBase,
 		store:       store,
 	}
-	nounJournalRoutesHelper.setupRoutes(authModel)
-	if nounJournalRoutesHelper.Router == nil {
-		serviceBase.Logger.Println("Error creating NounJournalRoutesHelper")
-		return nil
-	}
 
-	return nounJournalRoutesHelper
+	nounJournalRouter.setupRoutes(authModel)
+
+	return nounJournalRouter
 }
 
-func (j *NounJournalRoutesHelper[R]) setupRoutes(authModel *security.AuthModel) {
+func (j *NounJournalRouter[R]) setupRoutes(authModel *security.AuthModel) {
 	var routeString = "/v1/journal"
 	j.RegisterRoute(constants.HTTP_GET, routeString, authModel, j.GetJournalChanges)
 
@@ -53,7 +60,7 @@ func (j *NounJournalRoutesHelper[R]) setupRoutes(authModel *security.AuthModel) 
 
 }
 
-func (j *NounJournalRoutesHelper[R]) GetJournalChanges(w http.ResponseWriter, r *http.Request) {
+func (j *NounJournalRouter[R]) GetJournalChanges(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: do some validity checks on the clock and limit values passed (e.g. clock > 0, limit > 0)
 
@@ -64,9 +71,19 @@ func (j *NounJournalRoutesHelper[R]) GetJournalChanges(w http.ResponseWriter, r 
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
+	if clock < 1 {
+		j.Logger.Info("Invalid 'clock' parameter in GetJournalChanges: ", err)
+		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
+		return
+	}
 	limit, err := strconv.ParseInt(params["limit"], 10, 64)
 	if err != nil {
 		j.Logger.Info("Failed to parse 'limit' parameter in GetJournalChanges: ", err)
+		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
+		return
+	}
+	if limit < 1 {
+		j.Logger.Info("Invalid 'limit' parameter in GetJournalChanges: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
@@ -94,7 +111,7 @@ func (j *NounJournalRoutesHelper[R]) GetJournalChanges(w http.ResponseWriter, r 
 	j.WriteHttpOK(w, jsonResults)
 }
 
-func (j *NounJournalRoutesHelper[R]) GetJournalMaxClock(w http.ResponseWriter, r *http.Request) {
+func (j *NounJournalRouter[R]) GetJournalMaxClock(w http.ResponseWriter, r *http.Request) {
 	var maxClock uint64
 	err := j.store.GetJournalMaxClock(&maxClock)
 	//	START HERE with GetJournalChanges returning error code like the other methods do the noun router

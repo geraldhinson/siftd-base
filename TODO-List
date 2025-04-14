@@ -1,19 +1,19 @@
-- resolve TODOs in source files
-- create localized strings file
 - DONE - add a listen method to serviceBase that uses the srv.Listen model and that also supports graceful shutdown (signals, secured rest msg, or both)
+- DONE - convert unit tests to use framework (see unit-test.go for how to)
+- DONE - set both DBeaver and Postman to save to the example noun
+- ???? - set both DBeaver and Postman to save to the examples queries
+- DONE - convert query service to new model like example resource
+- DONE - start using git/github vs zipped in dropbox
+- ADD TEST -did I force the clock and limit on getjournalchanges to be valid values?
+- HALF-DONE: convert both examples to use the servicebase listen- resolve TODOs in source files
+- create localized strings file
 - figure out how to support https listening
 - add updatedBy to service base
 - add support for impersonation?
-- IN-PROGRESS - convert unit tests to use framework (see unit-test.go for how to)
 - fix get by id not using owner-id (resource store)
 - add an example method in the example resource showing rpc style (vs PATCH)
 - add a bit more detail to Employee in example
-- DONE - set both DBeaver and Postman to save to the example
-- DONE - convert query service to new model like example resource
 - clean up info logging in query service 
-- DONE - start using git/github vs zipped in dropbox
 - maybe convert to workspaces if it eliminates the need for go.mod aliasing when on local machine
 - cache busting required? For healthchecks? Other?
 - test with docker - add sample docker instructions to examples
-- did I force the clock and limit on getjournalchanges to be valid values?
-- HALF-DONE: convert both examples to use the servicebase listen
