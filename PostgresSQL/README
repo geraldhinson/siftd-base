@@ -1,0 +1,21 @@
+------------- Steps to setup your microservice DB --------------------
+
+0) Copy the create_DB-Resource-Journal.sql.original to a different file name (e.g. create_DB-Resource-Journal.sql)
+
+
+
+1) Change the create_DB-Resource-Journal.sql file (or whatever you called it). Replace the 3 references to <your-database-here> to the name of your database.
+
+
+
+2) Run this via the command line. 
+
+/<your-postgres-bin-folder>/psql --set=ON_ERROR_STOP=on -dpostgres -f/tmp/create_DB-Resource-Journal.sql 
+
+(depending on your local postgres setup you may need to provide user/password too)
+
+The postgres /bin folder for me is this: /usr/local/opt/postgresql@15/bin
+
+
+
+3) Change app.env to referece the correct db, password, port, etc.
