@@ -1,11 +1,15 @@
 package unitTestsShared
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/geraldhinson/siftd-base/pkg/helpers"
@@ -125,7 +129,7 @@ func CallServiceViaLoopback(configuration *viper.Viper, httpMethod string, fakeU
 		err := fmt.Errorf("Unable to retrieve listen address and port. Shutting down.")
 		return nil, err, http.StatusBadRequest
 	}
-	requestURL := fmt.Sprintf("http://%s/%s", listenAddress, requestURLSuffix)
+	requestURL := fmt.Sprintf("%s/%s", listenAddress, requestURLSuffix)
 
 	req, err := http.NewRequest(httpMethod, requestURL, nil)
 	if err != nil {
@@ -136,7 +140,45 @@ func CallServiceViaLoopback(configuration *viper.Viper, httpMethod string, fakeU
 		req.Header.Add("Authorization", string(fakeUserToken))
 	}
 
-	res, err := http.DefaultClient.Do(req)
+	var res *http.Response
+	if strings.Contains(listenAddress, "https") && strings.Contains(requestURL, "localhost") {
+		// all of this is required if this service is acting as a fake identity service and listening on
+		// localhost with a self-signed cert. We have to setup the client call to trust the self-signed cert
+		// just like we have to do for postman or a browser.
+		path := configuration.GetString("RESDIR_PATH")
+		if path == "" {
+			err = fmt.Errorf("unable to retrieve RESDIR_PATH - shutting down")
+			return nil, err, http.StatusBadRequest
+		}
+		httpsListenCert := configuration.GetString(constants.HTTPS_CERT_FILENAME)
+		if httpsListenCert == "" {
+			err = fmt.Errorf("unable to retrieve HTTPS certificate file - shutting down")
+			return nil, err, http.StatusBadRequest
+		}
+
+		caCert, err := os.ReadFile(path + "/" + httpsListenCert)
+		if err != nil {
+			return nil, err, http.StatusBadRequest
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+
+		client := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs:    caCertPool,
+					ServerName: "localhost", // must match SAN
+					//				InsecureSkipVerify: true,
+				},
+			},
+		}
+		res, err = client.Do(req)
+	} else {
+		// this is the normal case where we are calling the identity service
+		// and it is not localhost and we are not using a self-signed cert
+		res, err = http.DefaultClient.Do(req)
+	}
+
 	if err != nil {
 		err = fmt.Errorf("client call to noun service failed with : %s", err)
 		return nil, err, http.StatusBadRequest
@@ -167,112 +209,3 @@ func CallFakeIdentityServiceViaLoopbackToGetToken(configuration *viper.Viper, us
 
 	return resbody, err
 }
-
-/*
-// this is here to enable the plumbing to call this same process back via loopback to get tokens, fetch public keys, etc.
-// It is testing separately with the other helpers the service_test.go file
-type FakeIdentityServiceRouter struct {
-	*helpers.FakeIdentityServiceRoutesHelper
-}
-
-func NewFakeIdentityServiceRouter(employeeService *serviceBase.ServiceBase) *FakeIdentityServiceRouter {
-	employeeService.Logger.Info("Setting up the fake identity service router")
-
-	// This router is mostly built using serviceBase implementation, but we don't fully implement it in
-	// serviceBase because:
-	// 1. We want it to be obvious that it is one of the routers this service implements (ie.
-	//    easily seen in the routers folder)
-	// 2. It is important for the service writer to define the auth model for all routers
-	//
-	authModel, err := employeeService.NewAuthModel(security.NO_REALM, security.NO_AUTH, security.NO_EXPIRY, nil)
-	if err != nil {
-		employeeService.Logger.Fatalf("Failed to initialize AuthModel in FakeIdentityServiceRouter : %v", err)
-		return nil
-	}
-
-	// OK. Auth is defined. Now use the helper code to do the rest of the heavy lifting here.
-	//
-	FakeIdentityServiceRoutesHelper := helpers.NewFakeIdentityServiceRoutesHelper(employeeService, authModel)
-	if FakeIdentityServiceRoutesHelper == nil {
-		employeeService.Logger.Println("Error creating FakeIdentityServiceRoutesHelper")
-		return nil
-	}
-
-	FakeIdentityServiceRouter := &FakeIdentityServiceRouter{
-		FakeIdentityServiceRoutesHelper: FakeIdentityServiceRoutesHelper,
-	}
-
-	return FakeIdentityServiceRouter
-}
-*/
-
-/*
-type HealthCheckRouter struct {
-	*helpers.HealthCheckRoutesHelper[TestNounResource]
-}
-
-func NewHealthCheckRouter(employeeService *serviceBase.ServiceBase) *HealthCheckRouter {
-	employeeService.Logger.Info("Setting up the health check router")
-
-	// This router is mostly built using serviceBase implementation, but we don't fully implement it in
-	// serviceBase because:
-	// 1. We want it to be obvious that it is one of the routers this service implements (ie.
-	//    easily seen in the routers folder)
-	// 2. It is important for the service writer to define the auth model for all routers
-	//
-	authModel, err := employeeService.NewAuthModel(security.NO_REALM, security.NO_AUTH, security.NO_EXPIRY, nil)
-	if err != nil {
-		employeeService.Logger.Fatalf("Failed to initialize AuthModel in HealthCheckRouter : %v", err)
-		return nil
-	}
-
-	// OK. Auth is defined. Now use the helper code to do the rest of the heavy lifting here.
-	//
-	HealthCheckRoutesHelper := helpers.NewHealthCheckRoutesHelper[TestNounResource](employeeService, authModel)
-	if HealthCheckRoutesHelper == nil {
-		employeeService.Logger.Println("Error creating HealthCheckRoutesHelper")
-		return nil
-	}
-
-	HealthCheckServiceRouter := &HealthCheckRouter{
-		HealthCheckRoutesHelper: HealthCheckRoutesHelper,
-	}
-
-	return HealthCheckServiceRouter
-}
-*/
-/*
-type NounJournalRouter struct {
-	*helpers.NounJournalRoutesHelper[TestNounResource]
-}
-
-func NewNounJournalRouter(employeeService *serviceBase.ServiceBase) *NounJournalRouter {
-	employeeService.Logger.Info("Setting up the noun journal router")
-
-	// This router is mostly built using serviceBase implementation, but we don't fully implement it in
-	// serviceBase because:
-	// 1. We want it to be obvious that it is one of the routers this service implements (ie.
-	//    easily seen in the routers folder)
-	// 2. It is important for the service writer to define the auth model for all routers
-	//
-	authModelMachine, err := employeeService.NewAuthModel(security.REALM_MACHINE, security.VALID_IDENTITY, security.ONE_HOUR, nil)
-	if err != nil {
-		employeeService.Logger.Fatalf("Failed to initialize AuthModelMachine in SecuredQueriesRouter : %v", err)
-		return nil
-	}
-
-	// OK. Auth is defined. Now use the helper code to do the rest of the heavy lifting here.
-	//
-	NounJournalRoutesHelper := helpers.NewNounJournalRoutesHelper[TestNounResource](employeeService, authModelMachine)
-	if NounJournalRoutesHelper == nil {
-		employeeService.Logger.Println("Error creating NounJournalRoutesHelper")
-		return nil
-	}
-
-	NounJournalServiceRouter := &NounJournalRouter{
-		NounJournalRoutesHelper: NounJournalRoutesHelper,
-	}
-
-	return NounJournalServiceRouter
-}
-*/

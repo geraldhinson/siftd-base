@@ -26,7 +26,7 @@ type EmployeeResource struct {
 var gServiceBase *serviceBase.ServiceBase
 var gResourceStore *resourceStore.PostgresResourceStoreWithJournal[EmployeeResource]
 
-func setup(t *testing.T) *viper.Viper {
+func setupEnvVars(t *testing.T) *viper.Viper {
 	// Initialize configuration
 	viper.AddConfigPath(os.Getenv("RESDIR_PATH"))
 	viper.SetConfigFile("app.env")
@@ -41,22 +41,8 @@ func setup(t *testing.T) *viper.Viper {
 	return configuration
 }
 
-/*
-const (
-	DEBUGSIFTD_AUTH = "DEBUGSIFTD_AUTH"
-)
-
-const (
-	SERVICE_INSTANCE_NAME  = "SERVICE_INSTANCE_NAME"
-	DB_CONNECTION_STRING   = "DB_CONNECTSTRING"
-	JOURNAL_PARTITION_NAME = "JOURNAL_PARTITION_NAME"
-	IDENTITY_SERVICE       = "IDENTITY_SERVICE"
-	LISTEN_ADDRESS         = "LISTEN_ADDRESS"
-	CALLED_SERVICES        = "CALLED_SERVICES"
-*/
-
 func TestEnvironmentVariablesExist(t *testing.T) {
-	configuration := setup(t)
+	configuration := setupEnvVars(t)
 	if configuration == nil {
 		t.Fatal("Failed to read config for service.")
 	}
@@ -110,7 +96,7 @@ func TestCreateServiceBaseFail(t *testing.T) {
 	// override the env variable constants.SERVICE_INSTANCE_NAME
 	// to simulate a failure
 
-	configuration := setup(t)
+	configuration := setupEnvVars(t)
 	if configuration == nil {
 		t.Fatal("Failed to read config for service.")
 		return
@@ -186,7 +172,7 @@ func TestCreateResoureceStoreFail(t *testing.T) {
 		t.Fatal("Expected nil store")
 	}
 
-	configuration := setup(t)
+	configuration := setupEnvVars(t)
 	if configuration == nil {
 		t.Fatal("Failed to read config for service.")
 	}

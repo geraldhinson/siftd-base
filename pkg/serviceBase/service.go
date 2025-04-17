@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -104,9 +105,30 @@ func (sb *ServiceBase) ListenAndServe() {
 		sb.Logger.Fatalf("Unable to retrieve listen address and port. Shutting down.")
 		return
 	}
+	// separate the http:// (or https://) from the host:port
+	listenParts := strings.SplitAfter(listenAddress, "://")
+	if len(listenParts) != 2 {
+		sb.Logger.Fatalf("Invalid listen address of '%s' found. The format must be http://host:port or https://host:port.", listenAddress)
+		return
+	}
+
+	var certFile string
+	var keyFile string
+	if strings.Contains(listenParts[0], "https") {
+		certFile = sb.Configuration.GetString(constants.HTTPS_CERT_FILENAME)
+		if certFile == "" {
+			sb.Logger.Fatalf("Unable to retrieve HTTPS certificate file from env var %s. Shutting down.", constants.HTTPS_CERT_FILENAME)
+			return
+		}
+		keyFile = sb.Configuration.GetString(constants.HTTPS_KEY_FILENAME)
+		if keyFile == "" {
+			sb.Logger.Fatalf("Unable to retrieve HTTPS key file from env var %s. Shutting down.", constants.HTTPS_KEY_FILENAME)
+			return
+		}
+	}
 
 	server := &http.Server{
-		Addr:    listenAddress,
+		Addr:    listenParts[1],
 		Handler: sb.Router,
 	}
 
@@ -117,8 +139,14 @@ func (sb *ServiceBase) ListenAndServe() {
 	go func() {
 		sb.Logger.Printf("Inside 'listen' - Starting HTTP server on %s", listenAddress)
 
-		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			sb.Logger.Fatalf("HTTP server error: %v", err)
+		if strings.Contains(listenParts[0], "https") {
+			if err := server.ListenAndServeTLS(certFile, keyFile); !errors.Is(err, http.ErrServerClosed) {
+				sb.Logger.Fatalf("https server listen error: %v", err)
+			}
+		} else {
+			if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+				sb.Logger.Fatalf("http server listen error: %v", err)
+			}
 		}
 
 		sb.Logger.Println("Inside 'listen' - Stopped serving new connections.")

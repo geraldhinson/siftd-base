@@ -13,6 +13,8 @@
 
 # test key files
 *.pem
+*.key
+*.crt
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out

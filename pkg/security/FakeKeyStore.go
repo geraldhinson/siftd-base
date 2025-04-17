@@ -17,6 +17,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+// these are for signing JWT tokens for testing purposes only
+const LocalPrivateKeyFilename = "/private.pem"
+const LocalPublicKeyFilename = "/public.pem"
+
 type KeyStore struct {
 	logger           *logrus.Logger
 	configuration    *viper.Viper
@@ -128,7 +132,10 @@ func (k *KeyStore) GetPrivateKeyInUse() *rsa.PrivateKey {
 	return prvKey
 }
 
+// for signing fake JWT tokens for testing purposes only
 func (k *KeyStore) generatePrivPubKeys() {
+	path := k.configuration.GetString("RESDIR_PATH")
+
 	// generate key pair
 	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -153,7 +160,7 @@ func (k *KeyStore) generatePrivPubKeys() {
 	}
 	k.privateKeys_test[k.currentKid_test] = privateKeyMap
 
-	privatePem, err := os.Create("private.pem")
+	privatePem, err := os.Create(path + LocalPrivateKeyFilename)
 	if err != nil {
 		k.logger.Fatalf("Error when creating private.pem for testing: %s", err)
 	}
@@ -176,7 +183,7 @@ func (k *KeyStore) generatePrivPubKeys() {
 	}
 	k.publicKeys[k.currentKid_test] = publicKeyMap
 
-	publicPem, err := os.Create("public.pem")
+	publicPem, err := os.Create(path + LocalPublicKeyFilename)
 	if err != nil {
 		k.logger.Fatalf("Error when creating public.pem for testing: %s", err)
 	}

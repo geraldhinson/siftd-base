@@ -2,10 +2,13 @@ package security
 
 import (
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
@@ -117,7 +120,7 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 
 	listenAddress := k.configuration.GetString(constants.IDENTITY_SERVICE)
 	if listenAddress == "" {
-		err := fmt.Errorf("Unable to retrieve listen address and port. Shutting down.")
+		err := fmt.Errorf("unable to retrieve listen address and port - shutting down")
 		return nil, err
 	}
 
@@ -128,10 +131,51 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 		return nil, err
 	}
 
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		err = fmt.Errorf("client call to identity service failed with : %s", err)
-		return nil, err
+	var res *http.Response
+	if strings.Contains(listenAddress, "https") && strings.Contains(requestURL, "localhost") {
+		// all of this is required if this service is acting as a fake identity service and listening on
+		// localhost with a self-signed cert. We have to setup the client call to trust the self-signed cert
+		// just like we have to do for postman or a browser.
+		path := k.configuration.GetString("RESDIR_PATH")
+		if path == "" {
+			err = fmt.Errorf("unable to retrieve RESDIR_PATH - shutting down")
+			return nil, err
+		}
+		httpsListenCert := k.configuration.GetString(constants.HTTPS_CERT_FILENAME)
+		if httpsListenCert == "" {
+			err = fmt.Errorf("unable to retrieve HTTPS certificate file - shutting down")
+			return nil, err
+		}
+
+		caCert, error := os.ReadFile(path + "/" + httpsListenCert)
+		if error != nil {
+			return nil, error
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+
+		client := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs:    caCertPool,
+					ServerName: "localhost", // must match SAN
+					//				InsecureSkipVerify: true,
+				},
+			},
+		}
+		res, err = client.Do(req)
+		if err != nil {
+			err = fmt.Errorf("client call using self-signed cert of localhost identity service failed with : %s", err)
+			return nil, err
+		}
+	} else {
+		// this is the normal case where we are calling the identity service
+		// and it is not localhost and we are not using a self-signed cert
+		res, err = http.DefaultClient.Do(req)
+		if err != nil {
+			err = fmt.Errorf("http client call to identity service failed with : %s", err)
+			return nil, err
+		}
 	}
 
 	resBody, err := io.ReadAll(res.Body)

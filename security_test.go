@@ -3,9 +3,11 @@ package unittests
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -422,15 +424,40 @@ func Listener(service *serviceBase.ServiceBase) (*http.Server, error) {
 	}
 
 	fmt.Printf("This service is listening on: %s\n", listenAddress)
+	// separate the http:// (or https://) from the host:port
+	listenParts := strings.SplitAfter(listenAddress, "://")
+	if len(listenParts) != 2 {
+		return nil, fmt.Errorf("Invalid listen address of '%s' found. The format must be http://host:port or https://host:port.", listenAddress)
+	}
 
 	srv := &http.Server{
-		Addr:    listenAddress,
+		Addr:    listenParts[1],
 		Handler: service.Router,
 	}
-	go srv.ListenAndServe()
+
+	certfile := service.Configuration.GetString(constants.HTTPS_CERT_FILENAME)
+	if certfile == "" {
+		return nil, fmt.Errorf("Unable to retrieve HTTPS certificate file from env var %s. Shutting down.", constants.HTTPS_CERT_FILENAME)
+	}
+	keyfile := service.Configuration.GetString(constants.HTTPS_KEY_FILENAME)
+	if keyfile == "" {
+		return nil, fmt.Errorf("Unable to retrieve HTTPS key file from env var %s. Shutting down.", constants.HTTPS_KEY_FILENAME)
+	}
+	go func() {
+		if strings.Contains(listenAddress, "https") {
+			// put this in a go routine so that we can return the server and not block
+			if err := srv.ListenAndServeTLS(certfile, keyfile); !errors.Is(err, http.ErrServerClosed) {
+				fmt.Printf("https server listen error: %v", err)
+			}
+		} else {
+			if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+				fmt.Printf("http server listen error: %v", err)
+			}
+		}
+	}()
 
 	// pause until the server is up // TODO: make this less timing and more definitive (which will be faster too)
-	PauseUntilListening(listenAddress)
+	PauseUntilListening(listenParts[1])
 	//	time.Sleep(2 * time.Second)
 
 	return srv, nil
@@ -451,6 +478,7 @@ func PauseUntilListening(listenAddress string) {
 }
 
 func NewUnitTestRouter(realm string, authType security.AuthTypes, authTimeout security.AuthTimeout, list []string) (*UnitTestRouter, error) {
+
 	service := serviceBase.NewServiceBase()
 	if service == nil {
 		return nil, fmt.Errorf("Expected non-nil serviceBase")

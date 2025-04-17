@@ -5,7 +5,7 @@
 - DONE - convert query service to new model like example resource
 - DONE - start using git/github vs zipped in dropbox
 - ADD TEST -did I force the clock and limit on getjournalchanges to be valid values?
-- HALF-DONE: convert both examples to use the servicebase listen- resolve TODOs in source files
+- DONE: convert both examples to use the servicebase listen- resolve TODOs in source files
 - create localized strings file
 - figure out how to support https listening
 - add updatedBy to service base
