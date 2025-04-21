@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
@@ -56,6 +57,8 @@ type AuthModel struct {
 	authPolicy    *[]AuthPolicy
 	debugLevel    int
 }
+
+type AuthToken string
 
 func NewAuthModel(configuration *viper.Viper, Logger *logrus.Logger, KeyCache *KeyCache) *AuthModel {
 
@@ -333,7 +336,46 @@ func (a *AuthModel) ValidateSecurity(w http.ResponseWriter, r *http.Request) boo
 		return false
 	}
 
+	// push the claims into the request context
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		a.Logger.Info("Error getting claims from token")
+		a.writeHttpResponse(w, http.StatusUnauthorized, []byte(""))
+		return false
+	}
+	sub := claims["sub"]                       // this exists - used earlier
+	impersonatedBy := claims["impersonatedBy"] // this can exist or not
+	if impersonatedBy == nil {
+		impersonatedBy = ""
+	}
+	authToken := AuthToken(sub.(string) + ":" + impersonatedBy.(string))
+	if a.debugLevel > 0 {
+		a.Logger.Infof("authToken: %v", authToken)
+	}
+
+	// add the claims to the request context
+	r.Header.Set("X-AuthToken", string(authToken))
+
 	return true
+}
+
+func GetAuthHeader(r *http.Request) string {
+	authToken := r.Header.Get("X-AuthToken")
+	return authToken
+}
+
+func ValidateAuthToken(authToken string) map[string]string {
+	identities := strings.Split(authToken, ":")
+	var identitiesMap = make(map[string]string)
+	if len(identities) > 0 {
+		identitiesMap["sub"] = identities[0]
+	}
+	if len(identities) > 1 {
+		identitiesMap["impersonatedBy"] = identities[1]
+	} else {
+		identitiesMap["impersonatedBy"] = ""
+	}
+	return identitiesMap
 }
 
 func (a *AuthModel) Secure(nakedFunc http.HandlerFunc) http.HandlerFunc {

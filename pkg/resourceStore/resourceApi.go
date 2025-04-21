@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/security"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -98,10 +99,10 @@ func (store *PostgresResourceStoreWithJournal[R]) HealthCheck() error {
 }
 
 // GetById retrieves a resource by its ID
-func (store *PostgresResourceStoreWithJournal[R]) GetById(id string, resource *R) (int, error) {
+func (store *PostgresResourceStoreWithJournal[R]) GetById(id string, ownerId string, resource *R) (int, error) {
 	// validate that R is a struct that includes the ResourceBase struct
 
-	query, params := store.Cmds.GetResourceByIdCommand(id)
+	query, params := store.Cmds.GetResourceByIdCommand(id, ownerId)
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query, params)
 	if err != nil {
@@ -185,7 +186,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalChanges(clock int64,
 
 	for rows.Next() {
 		var journalEntry ResourceJournalEntry
-		if err := rows.Scan(&journalEntry.Clock, &journalEntry.Resource, &journalEntry.CreatedAt, &journalEntry.PartitionName); err != nil {
+		if err := rows.Scan(&journalEntry.Clock, &journalEntry.Resource, &journalEntry.UpdatedAt, &journalEntry.PartitionName); err != nil {
 			return fmt.Errorf("error scanning result in GetJournalChanges: %w", err)
 		}
 		*journalEntries = append(*journalEntries, journalEntry)
@@ -207,8 +208,11 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalMaxClock(maxClock *u
 	defer rows.Close()
 
 	for rows.Next() {
-		if err := rows.Scan(maxClock); err != nil {
-			return fmt.Errorf("error scanning result in GetJournalMaxClock: %w", err)
+		err := rows.Scan(maxClock)
+		if err != nil {
+			store.logger.Info("Null result detected on scan of journal clock. This is expected if no journal entries exist.")
+			*maxClock = 0
+			return nil
 		}
 	}
 
@@ -216,15 +220,16 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalMaxClock(maxClock *u
 }
 
 // CreateResource creates a new resource
-func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResource) (IResource, int, error) {
-	//	if _, ok := any(resource).(IResource); !ok {
-	//		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("resource is not a valid resource type")
-	//	}
+func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResource, extractedAuth string) (IResource, int, error) {
+	identities := security.ValidateAuthToken(extractedAuth)
+	if len(identities) == 0 {
+		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("no identities found in auth token")
+	}
 
 	now := time.Now().UTC()
 	resourceBase := resource.GetResourceBase()
 	resourceBase.CreatedAt = now
-	resourceBase.UpdatedAt = now
+	resourceBase.UpdatedAt = resourceBase.CreatedAt
 	resourceBase.Version = 1
 	resourceBase.Deleted = false
 
@@ -232,6 +237,9 @@ func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResou
 	if resourceBase.Id == "" {
 		resourceBase.Id = uuid.New().String()
 	}
+
+	resourceBase.UpdatedBy = identities["sub"]
+	resourceBase.ImpersonatedBy = identities["impersonatedBy"]
 
 	jsonResource, err := json.Marshal(resource)
 	if err != nil {
@@ -245,7 +253,7 @@ func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResou
 		store.logger.Error("Error detected on db insert in CreateResource: ", err)
 
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == constants.PRIMARY_KEY_VIOLATION_SQL_CODE {
-			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("a resource with this id already exists: %v", resourceBase.Id)
+			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("resource save failed for: %v", resourceBase.Id)
 		}
 		// We don't pass unantcipated database errors back to the caller. We log it and return a generic error message.
 		// This is to prevent leaking sensitive information to the caller.
@@ -256,10 +264,11 @@ func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResou
 }
 
 // CreateResource creates a new resource
-func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResource, ownerId string, resourceId string) (IResource, int, error) {
-	//	if _, ok := any(resource).(IResource); !ok {
-	//		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("resource is not a valid resource type")
-	//	}
+func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResource, ownerId string, resourceId string, extractedAuth string) (IResource, int, error) {
+	identities := security.ValidateAuthToken(extractedAuth)
+	if len(identities) == 0 {
+		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("no identities found in auth token")
+	}
 
 	// validate that the resource id in the URL matches the resource id in the body and
 	// that the owner id in the URL matches the owner id in the body
@@ -270,6 +279,9 @@ func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResou
 	if resourceBase.Id != resourceId {
 		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("resource id passed in the request does not match resource id in body")
 	}
+
+	resourceBase.UpdatedBy = identities["sub"]
+	resourceBase.ImpersonatedBy = identities["impersonatedBy"]
 
 	now := time.Now().UTC()
 	resourceBase.UpdatedAt = now
@@ -285,10 +297,10 @@ func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResou
 
 	command, err := store.dbPool.Exec(*store.rootCtx, query, params)
 	if err != nil {
-		store.logger.Error("Error detected on db insert in UpdateResource: ", err)
+		store.logger.Error("Error detected on db update in UpdateResource: ", err)
 
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == constants.PRIMARY_KEY_VIOLATION_SQL_CODE {
-			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("resource already exists: %v", resourceBase.Id)
+			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("resource update failed: %v", resourceBase.Id)
 		}
 
 		// We don't pass the database error back to the caller. We log it and return a generic error message.

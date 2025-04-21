@@ -6,12 +6,14 @@ import (
 )
 
 type ResourceBase struct {
-	Id        string    `json:"id"`
-	OwnerId   string    `json:"ownerId"`
-	Version   uint      `json:"version"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	Deleted   bool      `json:"deleted"`
+	Id             string    `json:"id"`
+	OwnerId        string    `json:"ownerId"`
+	Version        uint      `json:"version"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+	UpdatedBy      string    `json:"updatedBy"`
+	ImpersonatedBy string    `json:"impersonatedBy"`
+	Deleted        bool      `json:"deleted"`
 }
 
 func (r *ResourceBase) GetResourceBase() *ResourceBase {
@@ -26,7 +28,7 @@ type IResource interface {
 type ResourceJournalEntry struct {
 	Clock         uint64          `json:"clock"`
 	Resource      json.RawMessage `json:"resource"`
-	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
 	PartitionName string          `json:"partitionName"`
 }
 
@@ -35,10 +37,12 @@ type JournalMaxClock struct {
 }
 
 /*
+// example of how to custom marshall (keeping for reference)
+//
 type ResourceJournalEntry struct {
 	Clock         uint64
 	Resource      []byte
-	CreatedAt     time.Time
+	UpdatedAt     time.Time
 	PartitionName string
 }
 
@@ -49,7 +53,7 @@ func (rj ResourceJournalEntry) MarshalJSON() ([]byte, error) {
 	// Manually include the Resource field as-is
 	result := map[string]interface{}{
 		"clock":         rj.Clock,
-		"createdAt":     rj.CreatedAt,
+		"updatedAt":     rj.UpdatedAt,
 		"partitionName": rj.PartitionName,
 		"resource":      json.RawMessage(rj.Resource), // Use RawMessage to avoid re-marshaling
 	}

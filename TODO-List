@@ -1,19 +1,28 @@
 - DONE - add a listen method to serviceBase that uses the srv.Listen model and that also supports graceful shutdown (signals, secured rest msg, or both)
 - DONE - convert unit tests to use framework (see unit-test.go for how to)
 - DONE - set both DBeaver and Postman to save to the example noun
-- ???? - set both DBeaver and Postman to save to the examples queries
+- DONE - set both DBeaver and Postman to save to the examples queries
 - DONE - convert query service to new model like example resource
 - DONE - start using git/github vs zipped in dropbox
-- ADD TEST -did I force the clock and limit on getjournalchanges to be valid values?
 - DONE: convert both examples to use the servicebase listen- resolve TODOs in source files
 - create localized strings file
-- figure out how to support https listening
-- add updatedBy to service base
-- add support for impersonation?
-- fix get by id not using owner-id (resource store)
+- DONE(?): figure out how to support https listening (tested for localhost, need to validate for true signed certs)
+- DONE: add updatedBy to resource base
+- DONE (1/2): add support for impersonation?
+    - security and resource support it
+    - UNDONE: adding it to JWT and test using it from there
+- DONE: fix bug in get of max clock when journal table is empty
+- DONE: fix get by id not using owner-id (resource store)
 - add an example method in the example resource showing rpc style (vs PATCH)
 - add a bit more detail to Employee in example
 - clean up info logging in query service 
 - maybe convert to workspaces if it eliminates the need for go.mod aliasing when on local machine
 - cache busting required? For healthchecks? Other?
+
+UNITTESTS
 - test with docker - add sample docker instructions to examples
+- add tests for all non-create APIs when tables are empty
+- add tests that show updatedBy and impersonatedBy work for both matching-identity and not
+- CONSIDER: should I add automation of postman collection tests to ensure that they work too? (http vs https issu to consider there)
+- add test (or did i?) - did I force the clock and limit on getjournalchanges to be valid values?
+

@@ -304,7 +304,10 @@ func TestCreateResource(t *testing.T) {
 		Employee:     Employee{Name: "Alice", Age: 30},
 	}
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA)
+	// this simulates the additional auth token that is added to the header by the security layer
+	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
+
+	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
@@ -342,7 +345,10 @@ func TestCreateResourceFails(t *testing.T) {
 		Employee:     Employee{Name: "Goober", Age: 30},
 	}
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA)
+	// this simulates the additional auth token that is added to the header by the security layer
+	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
+
+	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
@@ -357,7 +363,7 @@ func TestCreateResourceFails(t *testing.T) {
 			OwnerId: "1234"},
 		Employee: Employee{Name: "Goober", Age: 30},
 	}
-	createdResource, status, errmsg = gResourceStore.CreateResource(resourceDuplicateId)
+	createdResource, status, errmsg = gResourceStore.CreateResource(resourceDuplicateId, addedSecurityHeader)
 	if status != constants.RESOURCE_ALREADY_EXISTS_CODE {
 		t.Errorf("Error creating resource - expected duplicate id error: %d, %v", status, errmsg)
 		return
@@ -380,13 +386,16 @@ func TestUpdateResource(t *testing.T) {
 		Employee:     Employee{Name: "Bob", Age: 40},
 	}
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA)
+	// this simulates the additional auth token that is added to the header by the security layer
+	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
+
+	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
 	}
 	resourceA.Employee.Name = "Bob's Uncle"
-	updatedResource, status, errmsg := gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id)
+	updatedResource, status, errmsg := gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error updating resource: %d, %v", status, errmsg)
 		return
@@ -430,7 +439,10 @@ func TestUpdateResourceFails(t *testing.T) {
 		Employee:     Employee{Name: "Bob", Age: 40},
 	}
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA)
+	// this simulates the additional auth token that is added to the header by the security layer
+	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
+
+	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
@@ -442,7 +454,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	// Test invalid version
 	resourceA.Employee.Name = "Bob's Aunt"
 	resourceA.ResourceBase.Version = 2 // Set version to 1 to simulate a conflict
-	updatedResource, status, errmsg := gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id)
+	updatedResource, status, errmsg := gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
 	if status != constants.RESOURCE_BAD_REQUEST_CODE {
 		t.Errorf("Error updating resource - wrong status returned for invalid version test: %d, %v", status, errmsg)
 		return
@@ -458,7 +470,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	resourceA.Employee.Name = "Bob's Aunt"
 	resourceA.ResourceBase.Version = 1       // Set version to 1 to simulate a conflict
 	var BadOwnerId = "NON-EXISTENT-OWNER-ID" // Set owner ID to a non-existent value
-	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, BadOwnerId, resourceA.Id)
+	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, BadOwnerId, resourceA.Id, addedSecurityHeader)
 	if status != constants.RESOURCE_BAD_REQUEST_CODE {
 		t.Errorf("Error updating resource - wrong status returned for invalid ownerId param test: %d, %v", status, errmsg)
 		return
@@ -475,7 +487,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	resourceA.ResourceBase.Version = 1
 	var saveResourceId = resourceA.Id
 	resourceA.Id = "NON-EXISTENT-ID" // Set ID to a non-existent value
-	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id)
+	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
 	if status != constants.RESOURCE_BAD_REQUEST_CODE {
 		t.Errorf("Error updating resource - wrong status returned for invalid id in body test: %d, %v", status, errmsg)
 		return
@@ -492,7 +504,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	resourceA.Employee.Name = "Bob's Aunt"
 	resourceA.ResourceBase.Version = 1
 	var BadIdParam = "NON-EXISTENT-ID" // Set ID to a non-existent value
-	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, BadIdParam)
+	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, BadIdParam, addedSecurityHeader)
 	if status != constants.RESOURCE_BAD_REQUEST_CODE {
 		t.Errorf("Error updating resource - wrong status returned for invalid id param test: %d, %v", status, errmsg)
 		return
@@ -516,14 +528,17 @@ func TestGetById(t *testing.T) {
 		Employee:     Employee{Name: "Danny", Age: 37},
 	}
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA)
+	// this simulates the additional auth token that is added to the header by the security layer
+	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
+
+	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
 	}
 
 	var fetchedResource EmployeeResource
-	status, errmsg = gResourceStore.GetById(createdResource.GetResourceBase().Id, &fetchedResource)
+	status, errmsg = gResourceStore.GetById(createdResource.GetResourceBase().Id, createdResource.GetResourceBase().OwnerId, &fetchedResource)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error getting resource by id: %d, %v", status, errmsg)
 		return
@@ -547,7 +562,7 @@ func TestGetByIdFail(t *testing.T) {
 	}
 
 	var fetchedResource EmployeeResource
-	status, errmsg := gResourceStore.GetById(resourceA.Id, &fetchedResource)
+	status, errmsg := gResourceStore.GetById(resourceA.Id, resourceA.OwnerId, &fetchedResource)
 	if status != constants.RESOURCE_NOT_FOUND_ERROR_CODE {
 		t.Errorf("Error found resource by bogus id: %d, %v", status, errmsg)
 		return
@@ -632,8 +647,8 @@ func TestGetJournalChanges(t *testing.T) {
 		if !strings.Contains(string(jsonBytes), "clock") {
 			t.Fatal("Expected JSON bytes to contain 'clock'")
 		}
-		if !strings.Contains(string(jsonBytes), "createdAt") {
-			t.Fatal("Expected JSON bytes to contain 'createdAt'")
+		if !strings.Contains(string(jsonBytes), "updatedAt") {
+			t.Fatal("Expected JSON bytes to contain 'updatedAt'")
 		}
 		if !strings.Contains(string(jsonBytes), "partitionName") {
 			t.Fatal("Expected JSON bytes to contain 'partitionName'")

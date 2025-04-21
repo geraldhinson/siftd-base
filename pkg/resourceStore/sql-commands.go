@@ -8,19 +8,18 @@ import (
 type PostgresCommandHelper struct {
 }
 
-func (p *PostgresCommandHelper) GetResourceByIdCommand(id string) (string, pgx.NamedArgs) {
+func (p *PostgresCommandHelper) GetResourceByIdCommand(id string, ownerId string) (string, pgx.NamedArgs) {
 	query := `
 		SELECT "Resource"
 		FROM public."Resources"
-		WHERE "Id" = @id;
+		WHERE "Id" = @id
+			AND "OwnerId" = @ownerId;
 	`
 	args := pgx.NamedArgs{
-		"id": id,
+		"id":      id,
+		"ownerId": ownerId,
 	}
 	return query, args
-
-	//		SELECT "Id", "OwnerId", "Version", "CreatedAt", "UpdatedAt", "Deleted", "Resource"
-
 }
 
 func (p *PostgresCommandHelper) GetResourcesByOwnerIdCommand(ownerId string) (string, pgx.NamedArgs) {
@@ -38,7 +37,7 @@ func (p *PostgresCommandHelper) GetResourcesByOwnerIdCommand(ownerId string) (st
 
 func (p *PostgresCommandHelper) GetJournalChangesCommand(clock, limit int64) (string, pgx.NamedArgs) {
 	query := `
-		SELECT "Clock", "Resource", "CreatedAt", "PartitionName"
+		SELECT "Clock", "Resource", "UpdatedAt", "PartitionName"
 		FROM public."Journal"
 		WHERE "Clock" >= @clock
 		ORDER BY "Clock"
@@ -63,15 +62,15 @@ func (p *PostgresCommandHelper) GetInsertResourceWithJournalCommand(resource IRe
 	query := `
 		WITH cte AS (
 			INSERT INTO public."Resources"
-				("Id", "OwnerId", "Version", "CreatedAt", "UpdatedAt", "Deleted", "Resource")
+				("Id", "OwnerId", "Version", "UpdatedAt", "Deleted", "Resource")
 			VALUES
-				(@id, @ownerId, @version, @createdAt, @updatedAt, @deleted, @resource)
+				(@id, @ownerId, @version, @updatedAt, @deleted, @resource)
 			RETURNING "Resource"
 		)
 		INSERT INTO public."Journal"
-			("Resource", "CreatedAt", "PartitionName")
+			("Resource", "UpdatedAt", "PartitionName")
 		SELECT
-			"Resource", @createdAt, @partitionName
+			"Resource", @updatedAt, @partitionName
 		FROM cte
 		RETURNING "Resource";
 	`
@@ -79,7 +78,6 @@ func (p *PostgresCommandHelper) GetInsertResourceWithJournalCommand(resource IRe
 		"id":            resource.GetResourceBase().Id,
 		"ownerId":       resource.GetResourceBase().OwnerId,
 		"version":       resource.GetResourceBase().Version,
-		"createdAt":     resource.GetResourceBase().CreatedAt,
 		"updatedAt":     resource.GetResourceBase().UpdatedAt,
 		"deleted":       resource.GetResourceBase().Deleted,
 		"resource":      resourceJson,
@@ -104,7 +102,7 @@ func (p *PostgresCommandHelper) GetUpdateResourceWithJournalCommand(resource IRe
 			RETURNING "Resource"
 		)
 		INSERT INTO public."Journal"
-			("Resource", "CreatedAt", "PartitionName")
+			("Resource", "UpdatedAt", "PartitionName")
 		SELECT
 			"Resource", @updatedAt, @partitionName
 		FROM cte
