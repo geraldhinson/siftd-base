@@ -93,6 +93,7 @@ func (a *AuthModel) AddPolicy(realm string, authType AuthTypes, authTimeout Auth
 			}
 
 			*a.authPolicy = append(*a.authPolicy, AuthPolicy{Realm: NO_REALM, AuthType: NO_AUTH, AuthTimeout: NO_EXPIRY, Listed: nil})
+			return nil
 		} else {
 			return fmt.Errorf("Invalid policy - NO_AUTH can only be used with NO_REALM and NO_EXPIRY")
 		}
