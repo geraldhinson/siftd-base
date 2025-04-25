@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
@@ -34,6 +35,7 @@ type publicKeyMap map[string]RSAPublicKey
 type privateKeyMap map[string]RSAPrivateKey
 
 type KeyCache struct {
+	mutex         sync.Mutex
 	publicKeys    publicKeyMap
 	logger        *logrus.Logger
 	configuration *viper.Viper
@@ -60,9 +62,11 @@ func (k *KeyCache) PurgeOldKeys() {
 	for kid, key := range k.publicKeys {
 		if time.Now().Unix()-key.createdTime > int64(expiryTime) {
 			if k.debugLevel > 0 {
-				k.logger.Infof("Purging old key: %s", kid)
+				k.logger.Infof("key cache - Purging old key: %s", kid)
 			}
+			k.mutex.Lock()
 			delete(k.publicKeys, kid)
+			k.mutex.Unlock()
 		}
 	}
 }
@@ -74,20 +78,24 @@ func (k *KeyCache) GetPublicKeyById(kid string) *rsa.PublicKey {
 	var publicKeyBytes []byte
 	var err error
 	var foundInCache bool = false
-	if key, ok := k.publicKeys[kid]; ok {
+
+	k.mutex.Lock()
+	key, ok := k.publicKeys[kid]
+	k.mutex.Unlock()
+	if ok {
 		foundInCache = true
 		if k.debugLevel > 0 {
-			k.logger.Infof("Key found in cache: %s", kid)
+			k.logger.Infof("key cache - Key found in cache: %s", kid)
 		}
 		publicKeyBytes = key.PublicKeyBytes
 	} else {
 		if k.debugLevel > 0 {
-			k.logger.Infof("Key not found in cache: %s", kid)
+			k.logger.Infof("key cache - Key not found in cache: %s", kid)
 		}
 		publicKeyBytes, err = k.FetchPublicKeyFromIdentityService(kid)
 		if err != nil {
 			if k.debugLevel > 0 {
-				k.logger.Infof("failed to fetch public key from identity service: %v", err)
+				k.logger.Infof("key cache - failed to fetch public key from identity service: %v", err)
 			}
 			return nil
 		}
@@ -96,21 +104,23 @@ func (k *KeyCache) GetPublicKeyById(kid string) *rsa.PublicKey {
 	// Parse the public key
 	pubKey, err := x509.ParsePKIXPublicKey(publicKeyBytes)
 	if err != nil {
-		k.logger.Infof("failed to parse public key: %v", err)
+		k.logger.Infof("key cache - failed to parse public key: %v", err)
 		return nil
 	}
 
 	// Assert that the key is an RSA public key
 	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
 	if !ok {
-		k.logger.Info("Public key found is not an RSA key")
+		k.logger.Info("key cache - Public key found is not an RSA key")
 		return nil
 	}
 
 	if !foundInCache {
 		// Add the key to the cache
 		timeCreated := time.Now().Unix()
+		k.mutex.Lock()
 		k.publicKeys[kid] = RSAPublicKey{PublicKeyBytes: publicKeyBytes, createdTime: timeCreated}
+		k.mutex.Unlock()
 	}
 
 	return rsaPubKey
@@ -120,14 +130,14 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 
 	listenAddress := k.configuration.GetString(constants.IDENTITY_SERVICE)
 	if listenAddress == "" {
-		err := fmt.Errorf("unable to retrieve listen address and port - shutting down")
+		err := fmt.Errorf("key cache - unable to retrieve listen address and port for the identity service - shutting down")
 		return nil, err
 	}
 
 	requestURL := fmt.Sprintf("%s/v1/keys/%s", listenAddress, kid)
 	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
 	if err != nil {
-		err = fmt.Errorf("failed to build identity service request in KeyCache: %s", err)
+		err = fmt.Errorf("key cache - failed to build identity service request: %s", err)
 		return nil, err
 	}
 
@@ -138,12 +148,12 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 		// just like we have to do for postman or a browser.
 		path := k.configuration.GetString("RESDIR_PATH")
 		if path == "" {
-			err = fmt.Errorf("unable to retrieve RESDIR_PATH - shutting down")
+			err = fmt.Errorf("key cache - unable to retrieve RESDIR_PATH - shutting down")
 			return nil, err
 		}
 		httpsListenCert := k.configuration.GetString(constants.HTTPS_CERT_FILENAME)
 		if httpsListenCert == "" {
-			err = fmt.Errorf("unable to retrieve HTTPS certificate file - shutting down")
+			err = fmt.Errorf("key cache - unable to retrieve HTTPS certificate file name - shutting down")
 			return nil, err
 		}
 
@@ -165,7 +175,7 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 		}
 		res, err = client.Do(req)
 		if err != nil {
-			err = fmt.Errorf("client call using self-signed cert of localhost identity service failed with : %s", err)
+			err = fmt.Errorf("key cache - client call to localhost (aka fake) identity service failed with : %s", err)
 			return nil, err
 		}
 	} else {
@@ -173,19 +183,19 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 		// and it is not localhost and we are not using a self-signed cert
 		res, err = http.DefaultClient.Do(req)
 		if err != nil {
-			err = fmt.Errorf("http client call to identity service failed with : %s", err)
+			err = fmt.Errorf("key cache - http client call to identity service failed with : %s", err)
 			return nil, err
 		}
 	}
 
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
-		err = fmt.Errorf("unable to read identity service reply: %s", err)
+		err = fmt.Errorf("key cache - unable to read identity service reply: %s", err)
 		return nil, err
 	}
 
 	if res.StatusCode != http.StatusOK {
-		err = fmt.Errorf("identity service returned status code: %d", res.StatusCode)
+		err = fmt.Errorf("key cache - identity service returned status code: %d", res.StatusCode)
 		return nil, err
 	}
 

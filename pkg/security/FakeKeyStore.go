@@ -17,11 +17,16 @@ import (
 	"github.com/spf13/viper"
 )
 
+// This entire 'fake key store' is for testing purposes only. It allows us to test locally
+// with legit-looking JWT tokens without having to procure a real JWT token signed by a legit key.
+// The single key pair used for signing the JWTs is generated on the fly every time this service starts up.
+
 // these are for signing JWT tokens for testing purposes only
 const LocalPrivateKeyFilename = "/private.pem"
 const LocalPublicKeyFilename = "/public.pem"
 
 type KeyStore struct {
+	// mutex          sync.Mutex   - not needed because there is no concurrent write access to this fake key store
 	logger           *logrus.Logger
 	configuration    *viper.Viper
 	publicKeys       publicKeyMap
@@ -49,7 +54,7 @@ func (k *KeyStore) GetPublicKey(kid string) ([]byte, error) {
 	if key, ok := k.publicKeys[kid]; ok {
 		return key.PublicKeyBytes, nil
 	}
-	return nil, fmt.Errorf("public key not found")
+	return nil, fmt.Errorf("fake key store - public key not found")
 }
 
 // JwtFakeUserLogin and JwtFakeServiceLogin both create a fake JWT token with a hard-coded id for testing purposes only
@@ -60,7 +65,7 @@ func (k *KeyStore) JwtFakeUserLogin() (based64JWT []byte, err error) {
 	// ensure that we are only running this in a local environment
 	listenAddress := k.configuration.GetString(constants.LISTEN_ADDRESS)
 	if !strings.Contains(listenAddress, "localhost") {
-		return nil, fmt.Errorf("fake JWT tokens can only be generated when the queries service is listening on localhost")
+		return nil, fmt.Errorf("fake key store - fake JWT tokens can only be generated when the queries service is listening on localhost")
 	}
 
 	// Create the JWT token
@@ -76,7 +81,8 @@ func (k *KeyStore) JwtFakeUserLogin() (based64JWT []byte, err error) {
 	claims["sub"] = "GUID-fake-member-GUID"
 	claims["sub_type"] = "Member"
 	claims["sub_name"] = "Fake (Member) User"
-	claims["iat"] = time.Now().Add(time.Hour).Unix() // TODO: why add an hour vs current time? Bug?
+	claims["iat"] = time.Now().Unix()
+	//	claims["iat"] = time.Now().Add(time.Hour).Unix()
 	claims["iss"] = "siftd-service-base"
 	claims["roles"] = []string{"admin"}
 
@@ -94,7 +100,7 @@ func (k *KeyStore) JwtFakeServiceLogin() (based64JWT []byte, err error) {
 	// ensure that we are only running this in a local environment
 	listenAddress := k.configuration.GetString(constants.LISTEN_ADDRESS)
 	if !strings.Contains(listenAddress, "localhost") {
-		return nil, fmt.Errorf("fake JWT tokens can only be generated when the queries service is listening on localhost")
+		return nil, fmt.Errorf("fake key store - fake JWT tokens can only be generated when the queries service is listening on localhost")
 	}
 
 	// Create the JWT token
@@ -110,7 +116,8 @@ func (k *KeyStore) JwtFakeServiceLogin() (based64JWT []byte, err error) {
 	claims["sub"] = "GUID-fake-service-GUID"
 	claims["sub_type"] = "Machine"
 	claims["sub_name"] = "Fake (Machine) Service"
-	claims["iat"] = time.Now().Add(time.Hour).Unix() // TODO: why add an hour vs current time? Bug?
+	claims["iat"] = time.Now().Unix()
+	//	claims["iat"] = time.Now().Add(time.Hour).Unix()
 	claims["iss"] = "siftd-service-base"
 
 	// Sign the token
@@ -125,7 +132,7 @@ func (k *KeyStore) JwtFakeServiceLogin() (based64JWT []byte, err error) {
 func (k *KeyStore) GetPrivateKeyInUse() *rsa.PrivateKey {
 	prvKey, err := x509.ParsePKCS1PrivateKey(k.privateKeys_test[k.currentKid_test].privateKeyBytes)
 	if err != nil {
-		k.logger.Fatalf("Failed to parse (test) private key: %v", err)
+		k.logger.Fatalf("fake key store - Failed to parse private key: %v", err)
 		return nil
 	}
 
@@ -139,7 +146,7 @@ func (k *KeyStore) generatePrivPubKeys() {
 	// generate key pair
 	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		k.logger.Fatalf("Cannot generate RSA key pair for testing: %s \n", err)
+		k.logger.Fatalf("fake key store - Cannot generate RSA key pair for testing: %s \n", err)
 	}
 	publickey := &privatekey.PublicKey
 	timeCreated := time.Now().Unix()
@@ -147,7 +154,7 @@ func (k *KeyStore) generatePrivPubKeys() {
 	// create kid for lookup of keys
 	k.currentKid_test = uuid.New().String()
 	if k.debugLevel > 0 {
-		k.logger.Infof("FakeKeyStore: the key id for private/public key pair generated is: %s", k.currentKid_test)
+		k.logger.Infof("fake key store - the key id for private/public key pair generated is: %s", k.currentKid_test)
 	}
 
 	var privateKeyMap RSAPrivateKey
@@ -162,11 +169,11 @@ func (k *KeyStore) generatePrivPubKeys() {
 
 	privatePem, err := os.Create(path + LocalPrivateKeyFilename)
 	if err != nil {
-		k.logger.Fatalf("Error when creating private.pem for testing: %s", err)
+		k.logger.Fatalf("fake key store - Error when creating private.pem for testing: %s", err)
 	}
 	err = pem.Encode(privatePem, privateKeyBlock)
 	if err != nil {
-		k.logger.Fatalf("Error when encoding private pem for testing: %s", err)
+		k.logger.Fatalf("fake key store - Error when encoding private pem for testing: %s", err)
 	}
 
 	// dump public key to file
@@ -175,7 +182,7 @@ func (k *KeyStore) generatePrivPubKeys() {
 	publicKeyMap.createdTime = timeCreated
 	publicKeyMap.PublicKeyBytes, err = x509.MarshalPKIXPublicKey(publickey)
 	if err != nil {
-		k.logger.Fatalf("Error when dumping publickey for testing: %s", err)
+		k.logger.Fatalf("fake key store - Error when writing the publickey to local file: %s", err)
 	}
 	publicKeyBlock := &pem.Block{
 		Type:  "RSA PUBLIC KEY",
@@ -185,10 +192,10 @@ func (k *KeyStore) generatePrivPubKeys() {
 
 	publicPem, err := os.Create(path + LocalPublicKeyFilename)
 	if err != nil {
-		k.logger.Fatalf("Error when creating public.pem for testing: %s", err)
+		k.logger.Fatalf("fake key store - Error when creating public.pem for testing: %s", err)
 	}
 	err = pem.Encode(publicPem, publicKeyBlock)
 	if err != nil {
-		k.logger.Fatalf("Error when encoding public pem for testing: %s", err)
+		k.logger.Fatalf("fake key store - Error when encoding public pem for testing: %s", err)
 	}
 }

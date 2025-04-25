@@ -13,6 +13,7 @@
     - UNDONE: adding it to JWT and test using it from there
 - DONE: fix bug in get of max clock when journal table is empty
 - DONE: fix get by id not using owner-id (resource store)
+- TEST: there was an extra hour being added to the iat in the FakeKeyStore. I removed it. Retest the timeouts to ensure they are working properly
 - add an example method in the example resource showing rpc style (vs PATCH)
 - add a bit more detail to Employee in example
 - clean up info logging in query service 

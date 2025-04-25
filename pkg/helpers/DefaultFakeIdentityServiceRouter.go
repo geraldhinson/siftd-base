@@ -27,13 +27,13 @@ func NewFakeIdentityServiceRouter(
 
 	fakeKeyStore := security.NewFakeKeyStore(serviceBase.Configuration, serviceBase.Logger)
 	if fakeKeyStore == nil {
-		serviceBase.Logger.Println("Error creating FakeKeyStore in default FakeIdentityServiceRouter")
+		serviceBase.Logger.Info("fake identity service router - error creating FakeKeyStore")
 		return nil
 	}
 
 	authModel, err := serviceBase.NewAuthModel(realm, authType, timeout, approvedList)
 	if err != nil {
-		serviceBase.Logger.Fatalf("Failed to initialize AuthModel in default HealthCheckRouter : %v", err)
+		serviceBase.Logger.Info("fake identity service router - failed to initialize AuthModel with ", err)
 		return nil
 	}
 
@@ -44,7 +44,7 @@ func NewFakeIdentityServiceRouter(
 
 	fakeIdentityServiceRouter.setupRoutes(authModel)
 	if fakeIdentityServiceRouter.Router == nil {
-		serviceBase.Logger.Println("Error creating FakeIdentityServiceHelper in default FakeIdentityServiceRouter")
+		serviceBase.Logger.Info("fake identity service router - error creating FakeIdentityService router")
 		return nil
 	}
 
@@ -64,7 +64,7 @@ func (k *FakeIdentityServiceRouter) setupRoutes(authModel *security.AuthModel) {
 }
 
 func (k *FakeIdentityServiceRouter) handleFakeUserLogin(w http.ResponseWriter, r *http.Request) {
-	k.Logger.Infof("Incoming request to create a fake user login token (for testing): %s", r.URL.Path)
+	k.Logger.Infof("fake identity service router - incoming request to create a fake user login token (for testing): %s", r.URL.Path)
 
 	token, err := k.FakeKeyStore.JwtFakeUserLogin()
 	if err != nil {
@@ -76,7 +76,7 @@ func (k *FakeIdentityServiceRouter) handleFakeUserLogin(w http.ResponseWriter, r
 }
 
 func (k *FakeIdentityServiceRouter) handleFakeServiceLogin(w http.ResponseWriter, r *http.Request) {
-	k.Logger.Infof("Incoming request to create a fake machine token (for testing): %s", r.URL.Path)
+	k.Logger.Infof("fake identity service router - incoming request to create a fake machine token (for testing): %s", r.URL.Path)
 
 	token, err := k.FakeKeyStore.JwtFakeServiceLogin()
 	if err != nil {
@@ -88,13 +88,13 @@ func (k *FakeIdentityServiceRouter) handleFakeServiceLogin(w http.ResponseWriter
 }
 
 func (k *FakeIdentityServiceRouter) handleFakeGetPublicKey(w http.ResponseWriter, r *http.Request) {
-	k.Logger.Infof("Incoming request to get a public key by id(for testing): %s", r.URL.Path)
+	k.Logger.Infof("fake identity service router - incoming request to get a public key by id(for testing): %s", r.URL.Path)
 	params := mux.Vars(r)
 	kid := params["keyId"]
 
 	publicKeyBytes, err := k.FakeKeyStore.GetPublicKey(kid)
 	if err != nil {
-		k.Logger.Infof("failed to find public key in fake identity service: %v", err)
+		k.Logger.Infof("fake identity service router - failed to find public key in fake identity service: %v", err)
 		k.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 	} else {
 		k.WriteHttpOK(w, publicKeyBytes)

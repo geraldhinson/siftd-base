@@ -29,7 +29,7 @@ func NewNounJournalRouter[R any](
 
 	authModel, err := serviceBase.NewAuthModel(realm, authType, timeout, approvedList)
 	if err != nil {
-		serviceBase.Logger.Fatalf("Failed to initialize AuthModel in default NounJournalRouter : %v", err)
+		serviceBase.Logger.Info("noun journal router - failed to initialize AuthModel with ", err)
 		return nil
 	}
 
@@ -37,7 +37,7 @@ func NewNounJournalRouter[R any](
 		serviceBase.Configuration,
 		serviceBase.Logger)
 	if err != nil {
-		serviceBase.Logger.Println("Error creating PostgresResourceStoreWithJournal in default NounJournalRouter:", err)
+		serviceBase.Logger.Info("noun journal router - error creating PostgresResourceStoreWithJournal with ", err)
 		return nil
 	}
 
@@ -47,6 +47,10 @@ func NewNounJournalRouter[R any](
 	}
 
 	nounJournalRouter.setupRoutes(authModel)
+	if nounJournalRouter.Router == nil {
+		serviceBase.Logger.Info("noun journal router - error creating NounJournalRouter")
+		return nil
+	}
 
 	return nounJournalRouter
 }
@@ -67,23 +71,23 @@ func (j *NounJournalRouter[R]) GetJournalChanges(w http.ResponseWriter, r *http.
 	params := j.GetQueryParams(r)
 	clock, err := strconv.ParseInt(params["clock"], 10, 64)
 	if err != nil {
-		j.Logger.Info("Failed to parse 'clock' parameter in GetJournalChanges: ", err)
+		j.Logger.Info("noun journal router - failed to parse 'clock' parameter in GetJournalChanges: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
 	if clock < 1 {
-		j.Logger.Info("Invalid 'clock' parameter in GetJournalChanges: ", err)
+		j.Logger.Info("noun journal router - invalid 'clock' parameter in GetJournalChanges: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
 	limit, err := strconv.ParseInt(params["limit"], 10, 64)
 	if err != nil {
-		j.Logger.Info("Failed to parse 'limit' parameter in GetJournalChanges: ", err)
+		j.Logger.Info("noun journal router - failed to parse 'limit' parameter in GetJournalChanges: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
 	if limit < 1 {
-		j.Logger.Info("Invalid 'limit' parameter in GetJournalChanges: ", err)
+		j.Logger.Info("noun journal router - invalid 'limit' parameter in GetJournalChanges: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
@@ -92,14 +96,14 @@ func (j *NounJournalRouter[R]) GetJournalChanges(w http.ResponseWriter, r *http.
 	err = j.store.GetJournalChanges(clock, limit, &journalEntries)
 	//	START HERE with GetJournalChanges returning error code like the other methods do the noun router
 	if err != nil {
-		j.Logger.Info("Call to resource store GetJournalChanges() in GetJournalChanges failed with: ", err)
+		j.Logger.Info("noun journal router - call to resource store GetJournalChanges() in GetJournalChanges failed with: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, err)
 		return
 	}
 
 	jsonResults, errmsg := json.Marshal(journalEntries)
 	if errmsg != nil {
-		j.Logger.Info("Call to json marshall journal entries in GetJournalChanges failed with : ", errmsg)
+		j.Logger.Info("noun journal router - call to json marshall journal entries in GetJournalChanges failed with : ", errmsg)
 		j.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, errmsg)
 		return
 	}
@@ -116,7 +120,7 @@ func (j *NounJournalRouter[R]) GetJournalMaxClock(w http.ResponseWriter, r *http
 	err := j.store.GetJournalMaxClock(&maxClock)
 	//	START HERE with GetJournalChanges returning error code like the other methods do the noun router
 	if err != nil {
-		j.Logger.Info("Call to resource store GetJournalMaxClock() in GetJournalMaxClock failed with: ", err)
+		j.Logger.Info("noun journal router - call to resource store get the journal's max clock in GetJournalMaxClock failed with: ", err)
 		j.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, err)
 		return
 	}

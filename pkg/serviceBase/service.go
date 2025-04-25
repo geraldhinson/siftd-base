@@ -37,7 +37,7 @@ type ServiceBase struct {
 func NewServiceBase() *ServiceBase {
 	logger, configuration := setup()
 	if logger == nil || configuration == nil {
-		fmt.Println("Setup failed for service. Shutting down.")
+		fmt.Println("service base - setup failed for service. Shutting down.")
 		return nil
 	}
 
@@ -48,14 +48,14 @@ func NewServiceBase() *ServiceBase {
 
 	serviceInstanceName := configuration.GetString(constants.SERVICE_INSTANCE_NAME)
 	if serviceInstanceName == "" {
-		logger.Info("Service instance name is not set in the configuration. Shutting down.")
+		logger.Info("service base - service instance name is not set in the configuration. Shutting down.")
 		return nil
 	}
 	logger.Infof("Validating configuration for [Service: %s]", serviceInstanceName)
 
 	keyCache := security.NewPublicKeyCache(configuration, logger)
 	if keyCache == nil {
-		logger.Info("Failed to create key store. Shutting down.")
+		logger.Info("service base - failed to create key store. Shutting down.")
 		return nil
 	}
 
@@ -81,7 +81,7 @@ func setup() (*logrus.Logger, *viper.Viper) {
 	// Initialize logger
 	logger := logrus.New()
 	if logger == nil {
-		fmt.Println("Failed to create logger for service. Shutting down.")
+		fmt.Println("service base - failed to create logger for service. Shutting down.")
 		return nil, nil
 	}
 
@@ -91,7 +91,7 @@ func setup() (*logrus.Logger, *viper.Viper) {
 	viper.AutomaticEnv() // overrides app.env with environment variables if same name found
 	err := viper.ReadInConfig()
 	if err != nil {
-		logger.Info("Failed to read config for service. Shutting down.")
+		logger.Info("service base - hailed to read config for service. Shutting down.")
 		return nil, nil
 	}
 	configuration := viper.GetViper()
@@ -102,13 +102,13 @@ func setup() (*logrus.Logger, *viper.Viper) {
 func (sb *ServiceBase) ListenAndServe() {
 	listenAddress := sb.Configuration.GetString(constants.LISTEN_ADDRESS)
 	if listenAddress == "" {
-		sb.Logger.Fatalf("Unable to retrieve listen address and port. Shutting down.")
+		sb.Logger.Fatalf("service base - unable to retrieve listen address and port. Shutting down.")
 		return
 	}
 	// separate the http:// (or https://) from the host:port
 	listenParts := strings.SplitAfter(listenAddress, "://")
 	if len(listenParts) != 2 {
-		sb.Logger.Fatalf("Invalid listen address of '%s' found. The format must be http://host:port or https://host:port.", listenAddress)
+		sb.Logger.Fatalf("service base - invalid listen address of '%s' found. The format must be http://host:port or https://host:port.", listenAddress)
 		return
 	}
 
@@ -117,12 +117,12 @@ func (sb *ServiceBase) ListenAndServe() {
 	if strings.Contains(listenParts[0], "https") {
 		certFile = sb.Configuration.GetString(constants.HTTPS_CERT_FILENAME)
 		if certFile == "" {
-			sb.Logger.Fatalf("Unable to retrieve HTTPS certificate file from env var %s. Shutting down.", constants.HTTPS_CERT_FILENAME)
+			sb.Logger.Fatalf("service base - unable to retrieve HTTPS certificate file from env var %s. Shutting down.", constants.HTTPS_CERT_FILENAME)
 			return
 		}
 		keyFile = sb.Configuration.GetString(constants.HTTPS_KEY_FILENAME)
 		if keyFile == "" {
-			sb.Logger.Fatalf("Unable to retrieve HTTPS key file from env var %s. Shutting down.", constants.HTTPS_KEY_FILENAME)
+			sb.Logger.Fatalf("service base - unable to retrieve HTTPS key file from env var %s. Shutting down.", constants.HTTPS_KEY_FILENAME)
 			return
 		}
 	}
@@ -133,27 +133,27 @@ func (sb *ServiceBase) ListenAndServe() {
 	}
 
 	if sb.debugLevel > 0 {
-		sb.Logger.Printf("Launching 'listen' go routine") // TODO: make these more meaningful and put them under a debug flag
+		sb.Logger.Printf("service base - launching 'listen' go routine") // TODO: make these more meaningful and put them under a debug flag
 	}
 
 	go func() {
-		sb.Logger.Printf("Inside 'listen' - Starting HTTP server on %s", listenAddress)
+		sb.Logger.Printf("service base - inside 'listen' goroutine - starting HTTP server on %s", listenAddress)
 
 		if strings.Contains(listenParts[0], "https") {
 			if err := server.ListenAndServeTLS(certFile, keyFile); !errors.Is(err, http.ErrServerClosed) {
-				sb.Logger.Fatalf("https server listen error: %v", err)
+				sb.Logger.Fatalf("service base - inside 'listen' goroutine - https server listen error: %v", err)
 			}
 		} else {
 			if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-				sb.Logger.Fatalf("http server listen error: %v", err)
+				sb.Logger.Fatalf("service base - inside 'listen' goroutine - http server listen error: %v", err)
 			}
 		}
 
-		sb.Logger.Println("Inside 'listen' - Stopped serving new connections.")
+		sb.Logger.Println("service base - inside 'listen' goroutine - stopped serving new connections.")
 	}()
 
 	if sb.debugLevel > 0 {
-		sb.Logger.Printf("Awaiting shutdown signal (SIGINT/SIGTERM)")
+		sb.Logger.Printf("service base - awaiting shutdown signal (SIGINT/SIGTERM)")
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -161,19 +161,19 @@ func (sb *ServiceBase) ListenAndServe() {
 	<-sigChan
 
 	if sb.debugLevel > 0 {
-		sb.Logger.Printf("Received shutdown signal")
+		sb.Logger.Printf("service base - received shutdown signal")
 	}
-	sb.Logger.Printf("Shutting down HTTP server on %s", listenAddress)
+	sb.Logger.Printf("service base - shutting down HTTP server on %s", listenAddress)
 
 	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownRelease()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		sb.Logger.Fatalf("HTTP shutdown error: %v", err)
+		sb.Logger.Fatalf("service base - HTTP shutdown error: %v", err)
 	}
 
 	if sb.debugLevel > 0 {
-		sb.Logger.Printf("HTTP server shutdown complete")
+		sb.Logger.Printf("service base - HTTP server shutdown complete")
 	}
 }
 
@@ -199,7 +199,7 @@ func (sb *ServiceBase) NewAuthModel(realm string, authType security.AuthTypes, a
 
 	err := authModel.AddPolicy(realm, authType, authTimeout, list)
 	if err != nil {
-		sb.Logger.Errorf("Failed to create auth policy: %v", err)
+		sb.Logger.Errorf("service base - failed to create auth policy: %v", err)
 		return nil, err
 	}
 
@@ -209,7 +209,7 @@ func (sb *ServiceBase) NewAuthModel(realm string, authType security.AuthTypes, a
 
 func (sb *ServiceBase) RegisterRoute(httpMethod string, routeString string, authModelUsers *security.AuthModel, handler func(http.ResponseWriter, *http.Request)) {
 	sb.Router.HandleFunc(routeString, authModelUsers.Secure(handler)).Methods(httpMethod)
-	sb.Logger.Infof("Registered route: %s %s", httpMethod, routeString)
+	sb.Logger.Infof("service base - registered route: %s %s", httpMethod, routeString)
 }
 
 func (sb *ServiceBase) WriteHttpError(w http.ResponseWriter, status int, v error) {

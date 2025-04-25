@@ -6,7 +6,6 @@ package helpers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
@@ -29,7 +28,7 @@ func NewNounHealthCheckRouter[R any](
 
 	authModel, err := serviceBase.NewAuthModel(realm, authType, timeout, approvedList)
 	if err != nil {
-		serviceBase.Logger.Fatalf("Failed to initialize AuthModel in default HealthCheckRouter : %v", err)
+		serviceBase.Logger.Info("noun healthcheck router - failed to initialize AuthModel with ", err)
 		return nil
 	}
 
@@ -37,7 +36,7 @@ func NewNounHealthCheckRouter[R any](
 		serviceBase.Configuration,
 		serviceBase.Logger)
 	if err != nil {
-		serviceBase.Logger.Println("Error creating PostgresResourceStoreWithJournal in default HealthCheckRouter:", err)
+		serviceBase.Logger.Info("noun healthcheck router - error creating PostgresResourceStoreWithJournal with ", err)
 		return nil
 	}
 
@@ -47,6 +46,10 @@ func NewNounHealthCheckRouter[R any](
 	}
 
 	healthCheckRouter.setupRoutes(authModel)
+	if healthCheckRouter.Router == nil {
+		serviceBase.Logger.Info("noun healthcheck router - error creating NounHealthCheck router")
+		return nil
+	}
 
 	return healthCheckRouter
 }
@@ -65,7 +68,7 @@ func (h *HealthCheckRouter[R]) GetHealthStandalone(w http.ResponseWriter, r *htt
 
 	err := h.store.HealthCheck()
 	if err != nil {
-		h.Logger.Info("the call to the resource store HealthCheck() in GetHealthStandalone failed with: ", err)
+		h.Logger.Info("noun healthcheck router - the call to the resource store HealthCheck() in GetHealthStandalone failed with: ", err)
 		health.DependencyStatus["database"] = constants.HEALTH_STATUS_UNHEALTHY
 		health.Status = constants.HEALTH_STATUS_UNHEALTHY
 	} else {
@@ -77,7 +80,7 @@ func (h *HealthCheckRouter[R]) GetHealthStandalone(w http.ResponseWriter, r *htt
 
 	jsonResults, errmsg := json.Marshal(health)
 	if errmsg != nil {
-		h.Logger.Info("Failed to convert health structure to json in GetHealthStandalone: ", errmsg)
+		h.Logger.Info("noun healthcheck router - failed to convert health structure to json in GetHealthStandalone: ", errmsg)
 		h.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, errmsg)
 		return
 	}
@@ -94,7 +97,7 @@ func (h *HealthCheckRouter[R]) GetListOfCalledServices(health *serviceBase.Healt
 
 	// Unmarshal the JSON array
 	if err := json.Unmarshal([]byte(calledServices), &health.CalledServices); err != nil {
-		fmt.Println("failed in GetListOfCalledServices unmarshalling called services JSON from env var:", err)
+		h.Logger.Info("noun healthcheck router - failed in GetListOfCalledServices unmarshalling called services JSON from env var:", err)
 		return
 	}
 }
