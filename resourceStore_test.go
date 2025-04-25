@@ -71,6 +71,7 @@ func TestEnvironmentVariablesExist(t *testing.T) {
 	if listenAddress == "" {
 		t.Fatal("Listen address is not set in the configuration.")
 	}
+
 	calledServices := configuration.GetString(constants.CALLED_SERVICES)
 	if calledServices == "" {
 		t.Fatal("Called services is not set in the configuration.")

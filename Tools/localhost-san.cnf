@@ -6,6 +6,7 @@ req_extensions     = req_ext
 distinguished_name = dn
 
 [dn]
+O = siftd
 CN = localhost
 
 [req_ext]

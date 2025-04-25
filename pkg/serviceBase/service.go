@@ -2,6 +2,8 @@ package serviceBase
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
@@ -51,7 +53,7 @@ func NewServiceBase() *ServiceBase {
 		logger.Info("service base - service instance name is not set in the configuration. Shutting down.")
 		return nil
 	}
-	logger.Infof("Validating configuration for [Service: %s]", serviceInstanceName)
+	logger.Infof("service base - validating configuration for [Service: %s]", serviceInstanceName)
 
 	keyCache := security.NewPublicKeyCache(configuration, logger)
 	if keyCache == nil {
@@ -125,6 +127,16 @@ func (sb *ServiceBase) ListenAndServe() {
 			sb.Logger.Fatalf("service base - unable to retrieve HTTPS key file from env var %s. Shutting down.", constants.HTTPS_KEY_FILENAME)
 			return
 		}
+
+		selfSigned, msg := sb.IsCertASiftdSelfSignedOne(certFile)
+		if msg != nil {
+			if selfSigned {
+				// log friendly reminder message if the cert is self-signed
+				sb.Logger.Info(msg)
+			} else {
+				sb.Logger.Infof("service base - error detected while checking if cert is siftd (self-signed): %v", msg)
+			}
+		}
 	}
 
 	server := &http.Server{
@@ -175,6 +187,43 @@ func (sb *ServiceBase) ListenAndServe() {
 	if sb.debugLevel > 0 {
 		sb.Logger.Printf("service base - HTTP server shutdown complete")
 	}
+}
+
+func (sb *ServiceBase) IsCertASiftdSelfSignedOne(certFileName string) (bool, error) {
+	if certFileName == "" {
+		error := fmt.Errorf("service base - unset cert file name in isCertASiftdSignedOne(). Shutting down.")
+		return false, error
+	}
+
+	// Load the certificate from a PEM format file
+	certBytesPEM, err := os.ReadFile(certFileName)
+	if err != nil {
+		error := fmt.Errorf("service base - error reading certificate file in isCertSelfSigned: %v", err)
+		return false, error
+	}
+
+	block, _ := pem.Decode(certBytesPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		error := fmt.Errorf("service base - error decoding certificate in isCertSelfSigned: %v", err)
+		return false, error
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		error := fmt.Errorf("service base - error parsing certificate in isCertSelfSigned: %v", err)
+		return false, error
+	}
+
+	if len(cert.Issuer.Organization) > 0 &&
+		cert.Issuer.Organization[0] == "siftd" &&
+		cert.Issuer.CommonName == "localhost" {
+		sb.Logger.Infof("service base - the configured certificate is self-signed and has the subject: %s", cert.Subject)
+		msg := fmt.Errorf("service base - WARNING: this service is configured to listen on https using a self-signed key/cert that was created using the siftd, cert creation tool.  THIS WILL CAUSE INCOMING CALLS TO FAIL unless you add the certificate to the trusted certs on the client side (e.g. in the browser, postman, etc.)")
+		return true, msg
+	}
+
+	// not using a siftd created self-signed cert
+	return false, nil
 }
 
 // convenience function to simplify the call to the actual NewAuthModel (in Auth.go)

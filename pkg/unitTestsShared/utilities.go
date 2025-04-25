@@ -116,6 +116,14 @@ func NewTestRouter(realm string, authType security.AuthTypes, authTimeout securi
 		return nil, fmt.Errorf("Failed to create health check api server (for testing only). Shutting down.")
 	}
 
+	listenAddress := service.Configuration.GetString(constants.LISTEN_ADDRESS)
+	if strings.Contains(listenAddress, "https") {
+		siftdSigned, _ := service.IsCertASiftdSelfSignedOne(service.Configuration.GetString(constants.HTTPS_CERT_FILENAME))
+		if !siftdSigned {
+			return nil, fmt.Errorf("This set of unit tests can be run while listening on https, but only is using the siftd, self-signed certificate (see /Tools to create such). Shutting down.")
+		}
+	}
+
 	go service.ListenAndServe()
 
 	return testRouter, nil
