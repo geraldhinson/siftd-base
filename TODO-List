@@ -26,4 +26,5 @@ UNITTESTS
 - add tests that show updatedBy and impersonatedBy work for both matching-identity and not
 - CONSIDER: should I add automation of postman collection tests to ensure that they work too? (http vs https issu to consider there)
 - add test (or did i?) - did I force the clock and limit on getjournalchanges to be valid values?
+- add load testing
 
