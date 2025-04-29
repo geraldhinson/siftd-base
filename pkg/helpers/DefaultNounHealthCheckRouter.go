@@ -6,6 +6,7 @@ package helpers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
@@ -75,8 +76,12 @@ func (h *HealthCheckRouter[R]) GetHealthStandalone(w http.ResponseWriter, r *htt
 		health.DependencyStatus["database"] = constants.HEALTH_STATUS_HEALTHY
 	}
 
-	// TODO: fix this experiment along with the method below
-	h.GetListOfCalledServices(&health)
+	err = h.GetListOfCalledServices(&health)
+	if err != nil {
+		h.Logger.Info("noun healthcheck router - failed to retrieve called services in GetHealthStandalone: ", err)
+		health.CalledServices = []string{err.Error()}
+		health.Status = constants.HEALTH_STATUS_UNHEALTHY
+	}
 
 	jsonResults, errmsg := json.Marshal(health)
 	if errmsg != nil {
@@ -88,16 +93,17 @@ func (h *HealthCheckRouter[R]) GetHealthStandalone(w http.ResponseWriter, r *htt
 	h.WriteHttpOK(w, jsonResults)
 }
 
-func (h *HealthCheckRouter[R]) GetListOfCalledServices(health *serviceBase.HealthStatus) {
+func (h *HealthCheckRouter[R]) GetListOfCalledServices(health *serviceBase.HealthStatus) error {
 	// TODO: implement this method
 	calledServices := h.Configuration.GetString(constants.CALLED_SERVICES)
-
-	// Declare a slice to hold the parsed array
-	//	var stringArray []string
+	if calledServices == "" {
+		return fmt.Errorf("noun healthcheck router - called services not defined in env var: %s", constants.CALLED_SERVICES)
+	}
 
 	// Unmarshal the JSON array
 	if err := json.Unmarshal([]byte(calledServices), &health.CalledServices); err != nil {
-		h.Logger.Info("noun healthcheck router - failed in GetListOfCalledServices unmarshalling called services JSON from env var:", err)
-		return
+		return fmt.Errorf("noun healthcheck router - unmarshalling of called services JSON from env var failed with %w", err)
 	}
+
+	return nil
 }

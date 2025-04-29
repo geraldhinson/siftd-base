@@ -84,6 +84,7 @@ func TestEnvironmentVariablesExist(t *testing.T) {
 	}
 
 }
+
 func TestCreateServiceBase(t *testing.T) {
 	gServiceBase = serviceBase.NewServiceBase()
 	if gServiceBase == nil {

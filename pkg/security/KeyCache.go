@@ -135,6 +135,10 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 	}
 
 	requestURL := fmt.Sprintf("%s/v1/keys/%s", listenAddress, kid)
+	if k.debugLevel > 0 {
+		k.logger.Infof("key cache - calling identity service to fetch public key: %s", requestURL)
+	}
+
 	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
 	if err != nil {
 		err = fmt.Errorf("key cache - failed to build identity service request: %s", err)

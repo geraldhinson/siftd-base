@@ -85,24 +85,24 @@ func (a *AuthModel) AddPolicy(realm string, authType AuthTypes, authTimeout Auth
 		if (realm == NO_REALM) && (authType == NO_AUTH) && (authTimeout == NO_EXPIRY) {
 			// and if they are we add them, but only if the list is empty
 			if len(list) > 0 {
-				return fmt.Errorf("Invalid policy - Use of approved list is not supported for NO_REALM, NO_AUTH, and NO_EXPIRY")
+				return fmt.Errorf("auth model - Invalid policy - Use of approved list is not supported for NO_REALM, NO_AUTH, and NO_EXPIRY")
 			}
 			// and only if it is the only policy in the array
 			if len(*a.authPolicy) > 0 {
-				return fmt.Errorf("Invalid policy - NO_REALM, NO_AUTH, and NO_EXPIRY must be the only policy when in use")
+				return fmt.Errorf("auth model - Invalid policy - NO_REALM, NO_AUTH, and NO_EXPIRY must be the only policy when in use")
 			}
 
 			*a.authPolicy = append(*a.authPolicy, AuthPolicy{Realm: NO_REALM, AuthType: NO_AUTH, AuthTimeout: NO_EXPIRY, Listed: nil})
 			return nil
 		} else {
-			return fmt.Errorf("Invalid policy - NO_AUTH can only be used with NO_REALM and NO_EXPIRY")
+			return fmt.Errorf("auth model - Invalid policy - NO_AUTH can only be used with NO_REALM and NO_EXPIRY")
 		}
 	} else {
 		if len(*a.authPolicy) > 0 {
 			// loop throught them to see if any of the preexisting policies NO_AUTH?
 			for _, policy := range *a.authPolicy {
 				if policy.AuthType == NO_AUTH {
-					return fmt.Errorf("Invalid policy - NO_AUTH cannot be used with any other policies")
+					return fmt.Errorf("auth model - Invalid policy - NO_AUTH cannot be used with any other policies")
 				}
 			}
 			// if we get here, then we are good to go
@@ -111,20 +111,20 @@ func (a *AuthModel) AddPolicy(realm string, authType AuthTypes, authTimeout Auth
 
 	// APPROVED_GROUPS and APPROVED_IDENTITIES must have a non-empty list
 	if (authType == APPROVED_GROUPS || authType == APPROVED_IDENTITIES) && len(list) == 0 {
-		return fmt.Errorf("Invalid policy - APPROVED_GROUPS and APPROVED_IDENTITIES must have a non-empty list")
+		return fmt.Errorf("auth model - Invalid policy - APPROVED_GROUPS and APPROVED_IDENTITIES must have a non-empty list")
 	}
 
 	// if not APPROVED_GROUPS or APPROVED_IDENTITIES, the list must be empty
 	if (authType != APPROVED_GROUPS && authType != APPROVED_IDENTITIES) &&
 		(list != nil || len(list) > 0) {
-		return fmt.Errorf("Invalid policy - the approved list is only valid when specifying APPROVED_GROUPS or APPROVED_IDENTITIES")
+		return fmt.Errorf("auth model - Invalid policy - the approved list is only valid when specifying APPROVED_GROUPS or APPROVED_IDENTITIES")
 	}
 
 	// if a pre-existing policy for a given realm exists, their authTimeout value must match
 	for _, policy := range *a.authPolicy {
 		if policy.Realm == realm {
 			if policy.AuthTimeout != authTimeout {
-				return fmt.Errorf("Invalid policy - all authTimeout values must match for a given realm: Realm %s timeout %d differs from previous timeout %d", realm, authTimeout, policy.AuthTimeout)
+				return fmt.Errorf("auth model - Invalid policy - all authTimeout values must match for a given realm: Realm %s timeout %d differs from previous timeout %d", realm, authTimeout, policy.AuthTimeout)
 			}
 		}
 	}
@@ -139,7 +139,7 @@ func (a *AuthModel) AddPolicy(realm string, authType AuthTypes, authTimeout Auth
 
 func (a *AuthModel) jwtAuthNCallback(token *jwt.Token) (interface{}, error) {
 	if a.debugLevel > 0 {
-		a.Logger.Infof("entering authn callback")
+		a.Logger.Infof("authn - entering authn callback")
 	}
 
 	// Return the key for validation (replace with your actual key)
@@ -171,7 +171,7 @@ func (a *AuthModel) jwtAuthNCallback(token *jwt.Token) (interface{}, error) {
 		return nil, fmt.Errorf("authn - error getting signing key")
 	}
 
-	if a.debugLevel > 0 {
+	if a.debugLevel > 1 {
 		a.Logger.Infof("authn - public Key fetched: %v", publicKey)
 	}
 
@@ -180,7 +180,7 @@ func (a *AuthModel) jwtAuthNCallback(token *jwt.Token) (interface{}, error) {
 
 func (a *AuthModel) jwtAuthZCallback(token *jwt.Token, r *http.Request) (bool, int) {
 	if a.debugLevel > 0 {
-		a.Logger.Infof("entering authz routine")
+		a.Logger.Infof("authz - entering authz routine")
 	}
 
 	// there must be a policy in the array
@@ -314,26 +314,26 @@ func (a *AuthModel) ValidateSecurity(w http.ResponseWriter, r *http.Request) boo
 	parsedToken, err := jwt.Parse(string(base64token), a.jwtAuthNCallback)
 	if err != nil {
 		if a.debugLevel > 0 {
-			a.Logger.Infof("ValidateSecurity - Error authenticating token: %v", err)
+			a.Logger.Infof("validate security - Error authenticating token: %v", err)
 		}
 		a.writeHttpResponse(w, http.StatusUnauthorized, []byte(""))
 		return false
 	}
 
-	if a.debugLevel > 0 {
+	if a.debugLevel > 1 {
 		// print the parsed token (debugging use only)
 		parsedTokenJSON, err := json.Marshal(parsedToken)
 		if err != nil {
-			a.Logger.Infof("ValidateSecurity - Error marshaling token for debug logging: %v", err)
+			a.Logger.Infof("validate security - Error marshaling token for debug logging: %v", err)
 			return false
 		}
-		a.Logger.Infof("ValidateSecurity - Parsed Token JSON: %v", string(parsedTokenJSON))
+		a.Logger.Infof("validate security - Parsed Token JSON: %v", string(parsedTokenJSON))
 	}
 
 	// AUTHZ - now do Authorization
 	if ok, err := a.jwtAuthZCallback(parsedToken, r); !ok {
 		if a.debugLevel > 0 {
-			a.Logger.Infof("ValidateSecurity - Error authorizing token: %v", err)
+			a.Logger.Infof("validate security - Error authorizing token: %v", err)
 		}
 		a.writeHttpResponse(w, http.StatusForbidden, []byte(""))
 		return false

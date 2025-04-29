@@ -68,10 +68,12 @@ func (k *FakeIdentityServiceRouter) handleFakeUserLogin(w http.ResponseWriter, r
 
 	token, err := k.FakeKeyStore.JwtFakeUserLogin()
 	if err != nil {
+		k.Logger.Infof("fake identity service router - failed to create fake user token: %v", err)
 		k.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
 
+	k.Logger.Infof("fake identity service router - successfully created fake user token")
 	k.WriteHttpOK(w, token)
 }
 
@@ -80,10 +82,12 @@ func (k *FakeIdentityServiceRouter) handleFakeServiceLogin(w http.ResponseWriter
 
 	token, err := k.FakeKeyStore.JwtFakeServiceLogin()
 	if err != nil {
+		k.Logger.Infof("fake identity service router - failed to create fake machine token: %v", err)
 		k.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
 
+	k.Logger.Infof("fake identity service router - successfully created fake machine token")
 	k.WriteHttpOK(w, token)
 }
 
@@ -97,6 +101,7 @@ func (k *FakeIdentityServiceRouter) handleFakeGetPublicKey(w http.ResponseWriter
 		k.Logger.Infof("fake identity service router - failed to find public key in fake identity service: %v", err)
 		k.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 	} else {
+		k.Logger.Infof("fake identity service router - successfully found public key in fake identity service")
 		k.WriteHttpOK(w, publicKeyBytes)
 	}
 }

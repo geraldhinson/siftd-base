@@ -120,7 +120,7 @@ func NewTestRouter(realm string, authType security.AuthTypes, authTimeout securi
 	if strings.Contains(listenAddress, "https") {
 		siftdSigned, _ := service.IsCertASiftdSelfSignedOne(service.Configuration.GetString(constants.HTTPS_CERT_FILENAME))
 		if !siftdSigned {
-			return nil, fmt.Errorf("This set of unit tests can be run while listening on https, but only is using the siftd, self-signed certificate (see /Tools to create such). Shutting down.")
+			return nil, fmt.Errorf("This set of unit tests can be run while listening on https, but only if using the siftd, self-signed certificate (see /Tools to create such). Shutting down.")
 		}
 	}
 
