@@ -63,6 +63,10 @@ func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logg
 	rootCtx, cancel := context.WithCancel(context.Background())
 	store.rootCtx = &rootCtx
 	store.cancel = &cancel
+
+	connConfig.MaxConnIdleTime = 60 * time.Second
+	connConfig.MaxConnLifetime = 60 * time.Second
+	connConfig.MaxConns = 15
 	//	defer cancel()
 
 	store.dbPool, err = pgxpool.NewWithConfig(*store.rootCtx, connConfig)
@@ -79,23 +83,6 @@ func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logg
 	logger.Info("restore store - successfully connected to database")
 
 	return store, nil
-}
-
-// HealthCheck performs a health check on the database
-func (store *PostgresResourceStoreWithJournal[R]) HealthCheck() error {
-
-	query := store.Cmds.GetHealthCheckCommand()
-
-	rows, err := store.dbPool.Query(*store.rootCtx, query)
-	// rows, err := store.dbPool.Query(*store.rootCtx, query, ids)
-	if err != nil {
-		store.logger.Error("restore store - error detected on HealthCheck query: ", err)
-		// We don't pass the database error back to the caller. We log it and return a generic error message.
-		// This is to prevent leaking sensitive information to the caller.
-		return fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
-	}
-	defer rows.Close()
-	return nil
 }
 
 // GetById retrieves a resource by its ID
@@ -312,4 +299,36 @@ func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResou
 	}
 
 	return resource, constants.RESOURCE_OK_CODE, nil
+}
+
+// HealthCheck performs a health check on the database
+func (store *PostgresResourceStoreWithJournal[R]) HealthCheck() error {
+	store.MonitorPoolStats()
+
+	query := store.Cmds.GetHealthCheckCommand()
+
+	rows, err := store.dbPool.Query(*store.rootCtx, query)
+	// rows, err := store.dbPool.Query(*store.rootCtx, query, ids)
+	if err != nil {
+		store.logger.Error("restore store - error detected on HealthCheck query: ", err)
+		// We don't pass the database error back to the caller. We log it and return a generic error message.
+		// This is to prevent leaking sensitive information to the caller.
+		return fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
+	}
+	defer rows.Close()
+	return nil
+}
+
+func (store *PostgresResourceStoreWithJournal[R]) MonitorPoolStats() {
+	stats := store.dbPool.Stat()
+	statsMap := make(map[string]int)
+
+	statsMap["total_connections"] = int(stats.TotalConns())
+	statsMap["acquired_connections"] = int(stats.AcquiredConns())
+	statsMap["idle_connections"] = int(stats.IdleConns())
+	statsMap["max_connections"] = int(stats.MaxConns())
+	statsMap["max_connection_lifetime"] = int(store.dbPool.Config().MaxConnLifetime.Seconds())
+	statsMap["max_connection_idle_time"] = int(store.dbPool.Config().MaxConnIdleTime.Seconds())
+
+	store.logger.Info("queryservice store - Pool stats", statsMap)
 }
