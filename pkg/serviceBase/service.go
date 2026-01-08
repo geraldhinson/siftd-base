@@ -93,7 +93,7 @@ func setup() (*logrus.Logger, *viper.Viper) {
 	viper.AutomaticEnv() // overrides app.env with environment variables if same name found
 	err := viper.ReadInConfig()
 	if err != nil {
-		logger.Info("service base - hailed to read config for service. Shutting down.")
+		logger.Info("service base - failed to read config for service with error: ", err, ". Shutting down.")
 		return nil, nil
 	}
 	configuration := viper.GetViper()
