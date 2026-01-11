@@ -4,8 +4,13 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+
+	//	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -16,6 +21,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
+
+type RSAJWK struct {
+	Kty string `json:"kty"`
+	N   string `json:"n"`
+	E   string `json:"e"`
+}
 
 type RSAPublicKey struct {
 	PublicKeyBytes []byte
@@ -102,18 +113,79 @@ func (k *KeyCache) GetPublicKeyById(kid string) *rsa.PublicKey {
 	}
 
 	// Parse the public key
+	var rsaPubKey *rsa.PublicKey
 	pubKey, err := x509.ParsePKIXPublicKey(publicKeyBytes)
-	if err != nil {
-		k.logger.Infof("key cache - failed to parse public key: %v", err)
-		return nil
+	//	if err != nil {
+	//		k.logger.Infof("key cache - failed to parse public key: %v", err)
+	//		return nil
+	//	}
+	if err == nil {
+		var ok bool
+		rsaPubKey, ok = pubKey.(*rsa.PublicKey)
+		if !ok {
+			k.logger.Info("key cache - Public key found is not an RSA key")
+			return nil
+		}
+	} else {
+		// 2️⃣ Fallback: attempt JWKS / JWK parsing (Supabase RS256)
+
+		var jwk RSAJWK
+		if err := json.Unmarshal(publicKeyBytes, &jwk); err != nil {
+			k.logger.Infof("key cache - failed to parse public key as x509 or jwk: %v", err)
+			return nil
+		}
+
+		if jwk.Kty != "RSA" {
+			k.logger.Info("key cache - JWK is not RSA")
+			return nil
+		}
+
+		// Decode modulus (n)
+		nBytes, err := base64.RawURLEncoding.DecodeString(jwk.N)
+		if err != nil {
+			k.logger.Infof("key cache - failed to decode jwk modulus: %v", err)
+			return nil
+		}
+
+		// Decode exponent (e)
+		eBytes, err := base64.RawURLEncoding.DecodeString(jwk.E)
+		if err != nil {
+			k.logger.Infof("key cache - failed to decode jwk exponent: %v", err)
+			return nil
+		}
+
+		e := new(big.Int).SetBytes(eBytes).Int64()
+		if e > int64(^uint(0)>>1) {
+			k.logger.Info("key cache - RSA exponent overflow")
+			return nil
+		}
+
+		rsaPubKey = &rsa.PublicKey{
+			N: new(big.Int).SetBytes(nBytes),
+			E: int(e),
+		}
+
+		/*
+			// publicKeyBytes contains ONLY jwk["n"]
+			modulusBytes, err := base64.RawURLEncoding.DecodeString(string(publicKeyBytes))
+			if err != nil {
+				k.logger.Infof("key cache - failed to base64url decode modulus: %v", err)
+				return nil
+			}
+
+			rsaPubKey = &rsa.PublicKey{
+				N: new(big.Int).SetBytes(modulusBytes),
+				E: 65537, // Supabase RS256 exponent (AQAB)
+			}
+		*/
 	}
 
 	// Assert that the key is an RSA public key
-	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
-	if !ok {
-		k.logger.Info("key cache - Public key found is not an RSA key")
-		return nil
-	}
+	//	rsaPubKey, ok = pubKey.(*rsa.PublicKey)
+	//	if !ok {
+	//		k.logger.Info("key cache - Public key found is not an RSA key")
+	//		return nil
+	//	}
 
 	if !foundInCache {
 		// Add the key to the cache
