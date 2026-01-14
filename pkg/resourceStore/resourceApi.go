@@ -40,25 +40,25 @@ func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logg
 		return nil, fmt.Errorf("resource store - invalid nil configuration detected")
 	}
 	if logger == nil {
-		return nil, fmt.Errorf("restore store - invalid nil logger detected")
+		return nil, fmt.Errorf("resource store - invalid nil logger detected")
 	}
 
 	store := &PostgresResourceStoreWithJournal[R]{logger: logger, Cmds: &PostgresCommandHelper{}}
 
 	store.dbConnectString = configuration.GetString(constants.DB_CONNECTION_STRING)
 	if store.dbConnectString == "" {
-		return nil, fmt.Errorf("restore store - unable to retrieve database connection string")
+		return nil, fmt.Errorf("resource store - unable to retrieve database connection string")
 	}
 
 	store.journalPartitionName = configuration.GetString(constants.JOURNAL_PARTITION_NAME)
 	if store.journalPartitionName == "" {
-		return nil, fmt.Errorf("restore store - unable to retrieve journal partition name")
+		return nil, fmt.Errorf("resource store - unable to retrieve journal partition name")
 	}
 
 	// Initialize the database pool (example with pgx)
 	connConfig, err := pgxpool.ParseConfig(store.dbConnectString)
 	if err != nil {
-		return nil, fmt.Errorf("restore store - unable to parse connection config: %v", err)
+		return nil, fmt.Errorf("resource store - unable to parse connection config: %v", err)
 	}
 	rootCtx, cancel := context.WithCancel(context.Background())
 	store.rootCtx = &rootCtx
@@ -71,16 +71,16 @@ func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logg
 
 	store.dbPool, err = pgxpool.NewWithConfig(*store.rootCtx, connConfig)
 	if err != nil {
-		return nil, fmt.Errorf("restore store - unable to connect to database: %v", err)
+		return nil, fmt.Errorf("resource store - unable to connect to database: %v", err)
 	}
 	//	defer store.dbPool.Close()
 
 	// Verify the connection
 	err = store.dbPool.Ping(*store.rootCtx)
 	if err != nil {
-		return nil, fmt.Errorf("restore store - unable to ping database to verify successful connection: %w", err)
+		return nil, fmt.Errorf("resource store - unable to ping database to verify successful connection: %w", err)
 	}
-	logger.Info("restore store - successfully connected to database")
+	logger.Info("resource store - successfully connected to database")
 
 	return store, nil
 }
@@ -93,7 +93,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetById(id string, ownerId str
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query, params)
 	if err != nil {
-		store.logger.Error("restore store - error detected on GetById query: ", err)
+		store.logger.Error("resource store - error detected on GetById query: ", err)
 		// We don't pass the database error back to the caller. We log it and return a generic error message.
 		// This is to prevent leaking sensitive information to the caller.
 		return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
@@ -103,19 +103,19 @@ func (store *PostgresResourceStoreWithJournal[R]) GetById(id string, ownerId str
 	if rows.Next() {
 		var resourceData []byte
 		if err := rows.Scan(&resourceData); err != nil {
-			return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("restore store - db error scanning result in GetById: %w", err)
+			return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("resource store - db error scanning result in GetById: %w", err)
 		}
 
 		err := json.Unmarshal(resourceData, resource)
 		if err != nil {
-			return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("restore store - error unmarshaling JSON in GetById: %w", err)
+			return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("resource store - error unmarshaling JSON in GetById: %w", err)
 		}
 
 		//		if resource.Deleted && throwExceptions {
 		//			return nil, fmt.Errorf("Resource not found (deleted): %v", id)
 		//		}
 	} else {
-		return constants.RESOURCE_NOT_FOUND_ERROR_CODE, fmt.Errorf("restore store - resource not found: %v", id)
+		return constants.RESOURCE_NOT_FOUND_ERROR_CODE, fmt.Errorf("resource store - resource not found: %v", id)
 	}
 
 	return constants.RESOURCE_OK_CODE, nil // resource found - no error
@@ -127,7 +127,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetByOwnerId(ownerId string, r
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query, params)
 	if err != nil {
-		store.logger.Error("restore store - error detected on GetByOwnerId query: ", err)
+		store.logger.Error("resource store - error detected on GetByOwnerId query: ", err)
 		// We don't pass the database error back to the caller. We log it and return a generic error message.
 		// This is to prevent leaking sensitive information to the caller.
 		return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
@@ -138,11 +138,11 @@ func (store *PostgresResourceStoreWithJournal[R]) GetByOwnerId(ownerId string, r
 		var resourceData []byte
 		var resource R
 		if err := rows.Scan(&resourceData); err != nil {
-			return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("restore store - error scanning result in GetByOwnerId: %w", err)
+			return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("resource store - error scanning result in GetByOwnerId: %w", err)
 		}
 		err := json.Unmarshal(resourceData, &resource)
 		if err != nil {
-			return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("restore store - error unmarshaling JSON in GetByOwnerId: %w", err)
+			return constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("resource store - error unmarshaling JSON in GetByOwnerId: %w", err)
 		}
 		*resources = append(*resources, resource)
 	}
@@ -164,7 +164,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalChanges(clock int64,
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query, params)
 	if err != nil {
-		store.logger.Error("restore store - error detected on GetJournalChanges query: ", err)
+		store.logger.Error("resource store - error detected on GetJournalChanges query: ", err)
 		// We don't pass the database error back to the caller. We log it and return a generic error message.
 		// This is to prevent leaking sensitive information to the caller.
 		return fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
@@ -174,7 +174,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalChanges(clock int64,
 	for rows.Next() {
 		var journalEntry ResourceJournalEntry
 		if err := rows.Scan(&journalEntry.Clock, &journalEntry.Resource, &journalEntry.UpdatedAt, &journalEntry.PartitionName); err != nil {
-			return fmt.Errorf("restore store - error scanning result in GetJournalChanges: %w", err)
+			return fmt.Errorf("resource store - error scanning result in GetJournalChanges: %w", err)
 		}
 		*journalEntries = append(*journalEntries, journalEntry)
 	}
@@ -187,7 +187,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalMaxClock(maxClock *u
 
 	rows, err := store.dbPool.Query(*store.rootCtx, query)
 	if err != nil {
-		store.logger.Error("restore store - error detected on GetJournalMaxClock query: ", err)
+		store.logger.Error("resource store - error detected on GetJournalMaxClock query: ", err)
 		// We don't pass the database error back to the caller. We log it and return a generic error message.
 		// This is to prevent leaking sensitive information to the caller.
 		return fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
@@ -197,7 +197,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalMaxClock(maxClock *u
 	for rows.Next() {
 		err := rows.Scan(maxClock)
 		if err != nil {
-			store.logger.Info("restore store - null result detected on scan of journal clock. This is expected if no journal entries exist.")
+			store.logger.Info("resource store - null result detected on scan of journal clock. This is expected if no journal entries exist.")
 			*maxClock = 0
 			return nil
 		}
@@ -210,7 +210,7 @@ func (store *PostgresResourceStoreWithJournal[R]) GetJournalMaxClock(maxClock *u
 func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResource, extractedAuth string) (IResource, int, error) {
 	identities := security.ValidateAuthToken(extractedAuth)
 	if len(identities) == 0 {
-		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("restore store - no identities found in auth token in CreateResource")
+		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("resource store - no identities found in auth token in CreateResource")
 	}
 
 	now := time.Now().UTC()
@@ -230,17 +230,17 @@ func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResou
 
 	jsonResource, err := json.Marshal(resource)
 	if err != nil {
-		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("restore store - error serializing resource in CreateResource: %w", err)
+		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("resource store - error serializing resource in CreateResource: %w", err)
 	}
 
 	query, params := store.Cmds.GetInsertResourceWithJournalCommand(resource, jsonResource, store.journalPartitionName)
 
 	_, err = store.dbPool.Exec(*store.rootCtx, query, params)
 	if err != nil {
-		store.logger.Error("restore store - error detected on db insert in CreateResource: ", err)
+		store.logger.Error("resource store - error detected on db insert in CreateResource: ", err)
 
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == constants.PRIMARY_KEY_VIOLATION_SQL_CODE {
-			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("restore store - resource save failed for %v in CreateResource", resourceBase.Id)
+			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("resource store - resource save failed for %v in CreateResource", resourceBase.Id)
 		}
 		// We don't pass unantcipated database errors back to the caller. We log it and return a generic error message.
 		// This is to prevent leaking sensitive information to the caller.
@@ -254,17 +254,17 @@ func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResou
 func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResource, ownerId string, resourceId string, extractedAuth string) (IResource, int, error) {
 	identities := security.ValidateAuthToken(extractedAuth)
 	if len(identities) == 0 {
-		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("restore store - no identities found in auth token in UpdateResource")
+		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("resource store - no identities found in auth token in UpdateResource")
 	}
 
 	// validate that the resource id in the URL matches the resource id in the body and
 	// that the owner id in the URL matches the owner id in the body
 	resourceBase := resource.GetResourceBase()
 	if resourceBase.OwnerId != ownerId {
-		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("restore store - owner id passed in the request does not match owner id in body in UpdateResource")
+		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("resource store - owner id passed in the request does not match owner id in body in UpdateResource")
 	}
 	if resourceBase.Id != resourceId {
-		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("restore store - resource id passed in the request does not match resource id in body in UpdateResource")
+		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("resource store - resource id passed in the request does not match resource id in body in UpdateResource")
 	}
 
 	resourceBase.UpdatedBy = identities["sub"]
@@ -277,17 +277,17 @@ func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResou
 
 	jsonResource, err := json.Marshal(resource)
 	if err != nil {
-		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("restore store - error serializing resource in UpdateResource: %w", err)
+		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf("resource store - error serializing resource in UpdateResource: %w", err)
 	}
 
 	query, params := store.Cmds.GetUpdateResourceWithJournalCommand(resource, versionToUpdate, jsonResource, store.journalPartitionName)
 
 	command, err := store.dbPool.Exec(*store.rootCtx, query, params)
 	if err != nil {
-		store.logger.Error("restore store - error detected on db update in UpdateResource: ", err)
+		store.logger.Error("resource store - error detected on db update in UpdateResource: ", err)
 
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == constants.PRIMARY_KEY_VIOLATION_SQL_CODE {
-			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("restore store - resource update failed for %v in UpdateResource", resourceBase.Id)
+			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("resource store - resource update failed for %v in UpdateResource", resourceBase.Id)
 		}
 
 		// We don't pass the database error back to the caller. We log it and return a generic error message.
@@ -295,7 +295,7 @@ func (store *PostgresResourceStoreWithJournal[R]) UpdateResource(resource IResou
 		return nil, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
 	}
 	if command.RowsAffected() == 0 {
-		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("restore store - no rows were updated because the resource id does not exist or the If-Match was not correct in UpdateResource")
+		return nil, constants.RESOURCE_BAD_REQUEST_CODE, fmt.Errorf("resource store - no rows were updated because the resource id does not exist or the If-Match was not correct in UpdateResource")
 	}
 
 	return resource, constants.RESOURCE_OK_CODE, nil
@@ -310,7 +310,7 @@ func (store *PostgresResourceStoreWithJournal[R]) HealthCheck() error {
 	rows, err := store.dbPool.Query(*store.rootCtx, query)
 	// rows, err := store.dbPool.Query(*store.rootCtx, query, ids)
 	if err != nil {
-		store.logger.Error("restore store - error detected on HealthCheck query: ", err)
+		store.logger.Error("resource store - error detected on HealthCheck query: ", err)
 		// We don't pass the database error back to the caller. We log it and return a generic error message.
 		// This is to prevent leaking sensitive information to the caller.
 		return fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
