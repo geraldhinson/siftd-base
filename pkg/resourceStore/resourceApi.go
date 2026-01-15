@@ -240,7 +240,7 @@ func (store *PostgresResourceStoreWithJournal[R]) CreateResource(resource IResou
 		store.logger.Error("resource store - error detected on db insert in CreateResource: ", err)
 
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == constants.PRIMARY_KEY_VIOLATION_SQL_CODE {
-			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("resource store - resource save failed for %v in CreateResource", resourceBase.Id)
+			return nil, constants.RESOURCE_ALREADY_EXISTS_CODE, fmt.Errorf("resource store - resource save failed for %v in CreateResource due to duplicate key", resourceBase.Id)
 		}
 		// We don't pass unantcipated database errors back to the caller. We log it and return a generic error message.
 		// This is to prevent leaking sensitive information to the caller.

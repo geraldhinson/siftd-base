@@ -269,6 +269,8 @@ func (sb *ServiceBase) WriteHttpError(w http.ResponseWriter, status int, v error
 		httpStatus = http.StatusNotFound
 	case constants.RESOURCE_BAD_REQUEST_CODE:
 		httpStatus = http.StatusBadRequest
+	case constants.RESOURCE_ALREADY_EXISTS_CODE:
+		httpStatus = http.StatusConflict
 	}
 
 	w.Header().Set("Content-Type", "application/json")

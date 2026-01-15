@@ -13,6 +13,7 @@ type ResourceBase struct {
 	UpdatedAt      time.Time `json:"updatedAt"`
 	UpdatedBy      string    `json:"updatedBy"`
 	ImpersonatedBy string    `json:"impersonatedBy"`
+	LastAction     string    `json:"lastAction"`
 	Deleted        bool      `json:"deleted"`
 }
 
