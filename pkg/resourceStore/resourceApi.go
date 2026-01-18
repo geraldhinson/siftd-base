@@ -330,5 +330,5 @@ func (store *PostgresResourceStoreWithJournal[R]) MonitorPoolStats() {
 	statsMap["max_connection_lifetime"] = int(store.dbPool.Config().MaxConnLifetime.Seconds())
 	statsMap["max_connection_idle_time"] = int(store.dbPool.Config().MaxConnIdleTime.Seconds())
 
-	store.logger.Info("queryservice store - Pool stats", statsMap)
+	store.logger.Info("resource store - Pool stats", statsMap)
 }
