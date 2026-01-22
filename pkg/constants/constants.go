@@ -26,6 +26,7 @@ const (
 	INTERNAL_SERVER_ERROR          = "a backend system error occurred - please check the service logs"
 	PRIMARY_KEY_VIOLATION_SQL_CODE = "23505" // Conflict on primary key
 	RESOURCE_NOT_FOUND_ERROR_CODE  = -404    // Resource not found (note similarity to HTTP status codes)
+	RESOURCE_UNAUTHORIZED          = -403    // Change not authorized (note similarity to HTTP status codes)
 	RESOURCE_BAD_REQUEST_CODE      = -400    // Bad request (note similarity to HTTP status codes)
 	RESOURCE_ALREADY_EXISTS_CODE   = -409    // Resource already exists (note similarity to HTTP status codes)
 	RESOURCE_INTERNAL_ERROR_CODE   = -500    // Internal server error (note similarity to HTTP status codes)

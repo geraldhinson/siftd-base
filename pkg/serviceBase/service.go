@@ -271,6 +271,8 @@ func (sb *ServiceBase) WriteHttpError(w http.ResponseWriter, status int, v error
 		httpStatus = http.StatusBadRequest
 	case constants.RESOURCE_ALREADY_EXISTS_CODE:
 		httpStatus = http.StatusConflict
+	case constants.RESOURCE_UNAUTHORIZED:
+		httpStatus = http.StatusForbidden
 	}
 
 	w.Header().Set("Content-Type", "application/json")
