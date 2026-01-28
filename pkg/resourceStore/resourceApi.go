@@ -86,7 +86,7 @@ func NewPostgresResourceStoreWithJournal[R any](configuration *viper.Viper, logg
 }
 
 // GetById retrieves a resource by its ID
-func (store *PostgresResourceStoreWithJournal[R]) GetById(id string, ownerId string, resource *R) (int, error) {
+func (store *PostgresResourceStoreWithJournal[R]) GetById(ownerId string, id string, resource *R) (int, error) {
 	// validate that R is a struct that includes the ResourceBase struct
 
 	query, params := store.Cmds.GetResourceByIdCommand(id, ownerId)

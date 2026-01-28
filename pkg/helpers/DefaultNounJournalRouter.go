@@ -5,6 +5,7 @@ package helpers
 //
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -76,7 +77,8 @@ func (j *NounJournalRouter[R]) GetJournalChanges(w http.ResponseWriter, r *http.
 		return
 	}
 	if clock < 1 {
-		j.Logger.Info("noun journal router - invalid 'clock' parameter in GetJournalChanges: ", err)
+		err := errors.New("invalid < 1 'clock' parameter in GetJournalChanges")
+		j.Logger.Info("noun journal router - ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
@@ -87,7 +89,8 @@ func (j *NounJournalRouter[R]) GetJournalChanges(w http.ResponseWriter, r *http.
 		return
 	}
 	if limit < 1 {
-		j.Logger.Info("noun journal router - invalid 'limit' parameter in GetJournalChanges: ", err)
+		err := errors.New("invalid < 1 'limit' parameter in GetJournalChanges")
+		j.Logger.Info("noun journal router - ", err)
 		j.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
 		return
 	}
