@@ -27,12 +27,13 @@ type HealthStatus struct {
 }
 
 type ServiceBase struct {
-	Configuration *viper.Viper
-	Logger        *logrus.Logger
-	Router        *mux.Router
-	KeyCache      *security.KeyCache
-	HealthStatus  *HealthStatus
-	debugLevel    int
+	Configuration  *viper.Viper
+	Logger         *logrus.Logger
+	Router         *mux.Router
+	KeyCache       *security.KeyCache
+	HealthStatus   *HealthStatus
+	CommandChannel chan string // can be used to communicate to backend processes when needed
+	debugLevel     int
 }
 
 // ValidateConfigAndListen configures the services for the Queries Service and listens for incoming requests
@@ -69,13 +70,16 @@ func NewServiceBase() *ServiceBase {
 		CalledServices:   []string{},
 	}
 
+	commandChannel := make(chan string, 1)
+
 	return &ServiceBase{
-		Configuration: configuration,
-		Logger:        logger,
-		Router:        router,
-		KeyCache:      keyCache,
-		HealthStatus:  health,
-		debugLevel:    debugLevel,
+		Configuration:  configuration,
+		Logger:         logger,
+		Router:         router,
+		KeyCache:       keyCache,
+		HealthStatus:   health,
+		debugLevel:     debugLevel,
+		CommandChannel: commandChannel,
 	}
 }
 
@@ -168,9 +172,11 @@ func (sb *ServiceBase) ListenAndServe() {
 		sb.Logger.Printf("service base - awaiting shutdown signal (SIGINT/SIGTERM)")
 	}
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
+	sigChannel := make(chan os.Signal, 1)
+	signal.Notify(sigChannel, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChannel
+
+	sb.CommandChannel <- "SIGTERM"
 
 	if sb.debugLevel > 0 {
 		sb.Logger.Printf("service base - received shutdown signal")
