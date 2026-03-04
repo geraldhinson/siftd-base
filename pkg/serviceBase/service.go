@@ -93,13 +93,18 @@ func setup() (*logrus.Logger, *viper.Viper) {
 
 	// Initialize configuration
 	viper.AddConfigPath(os.Getenv("RESDIR_PATH"))
-	viper.SetConfigFile("app.env")
-	viper.AutomaticEnv() // overrides app.env with environment variables if same name found
-	err := viper.ReadInConfig()
-	if err != nil {
-		logger.Info("service base - failed to read config for service with error: ", err, ". Shutting down.")
-		return nil, nil
+
+	configFile := os.Getenv("SIFTD_ENV_FILE") // for local development with app.env or docker.app.env
+	if configFile != "" {
+		viper.SetConfigFile(configFile)
+		err := viper.ReadInConfig()
+		if err != nil {
+			logger.Info("service base - failed to read config for service with error: ", err, ". Shutting down.")
+			return nil, nil
+		}
 	}
+
+	viper.AutomaticEnv() // overrides app.env with environment variables if same name found
 	configuration := viper.GetViper()
 
 	return logger, configuration
