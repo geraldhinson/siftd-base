@@ -111,11 +111,20 @@ func setup() (*logrus.Logger, *viper.Viper) {
 }
 
 func (sb *ServiceBase) ListenAndServe() {
-	listenAddress := sb.Configuration.GetString(constants.LISTEN_ADDRESS)
-	if listenAddress == "" {
-		sb.Logger.Fatalf("service base - unable to retrieve listen address and port. Shutting down.")
-		return
+	var listenAddress string
+	// if running in cloud the port will be supplied and we use it to override the listen address in the config
+	// if running locally, both using docker and not, we expect the listen address to be fully specified in the config
+	envPort := os.Getenv("PORT")
+	if envPort != "" {
+		listenAddress = "http://0.0.0.0:" + envPort
+	} else {
+		listenAddress = sb.Configuration.GetString(constants.LISTEN_ADDRESS)
+		if listenAddress == "" {
+			sb.Logger.Fatalf("service base - unable to retrieve listen address and port. Shutting down.")
+			return
+		}
 	}
+
 	// separate the http:// (or https://) from the host:port
 	listenParts := strings.SplitAfter(listenAddress, "://")
 	if len(listenParts) != 2 {
