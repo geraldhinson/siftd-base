@@ -123,9 +123,27 @@ func (store *PostgresResourceStoreWithJournal[R]) Close() {
 }
 
 func (store *PostgresResourceStoreWithJournal[R]) DetermineMaxConnectionPoolSize(configuration *viper.Viper, logger *logrus.Logger, maxConnsConfigKey string) (int32, error) {
-	const defaultDBPoolMaxConns int32 = 15
+
+	const (
+		defaultDBPoolMaxConns      int32 = 15
+		defaultJournalPoolMaxConns int32 = 5
+		defaultHealthPoolMaxConns  int32 = 2
+	)
 
 	maxConns := defaultDBPoolMaxConns
+
+	switch maxConnsConfigKey {
+	case constants.NOUN_DB_POOL_MAX_CONNS:
+		maxConns = defaultDBPoolMaxConns
+
+	case constants.JOURNAL_DB_POOL_MAX_CONNS:
+		maxConns = defaultJournalPoolMaxConns
+
+	case constants.HEALTH_DB_POOL_MAX_CONNS:
+		maxConns = defaultHealthPoolMaxConns
+	}
+
+	usedConfiguredValue := false
 
 	if maxConnsConfigKey != "" {
 		configuredValue := strings.TrimSpace(
@@ -155,17 +173,27 @@ func (store *PostgresResourceStoreWithJournal[R]) DetermineMaxConnectionPoolSize
 			}
 
 			maxConns = int32(parsedValue)
+			usedConfiguredValue = true
 		}
 	}
 
-	if maxConnsConfigKey == "" {
+	switch {
+	case maxConnsConfigKey == "":
 		logger.Infof(
-			"resource store - database pool configured with default maximum of %d connections",
+			"resource store - database pool configured with general default maximum of %d connections",
 			maxConns,
 		)
-	} else {
+
+	case usedConfiguredValue:
 		logger.Infof(
 			"resource store - database pool configured with maximum of %d connections using %s",
+			maxConns,
+			maxConnsConfigKey,
+		)
+
+	default:
+		logger.Infof(
+			"resource store - database pool configured with default maximum of %d connections for %s",
 			maxConns,
 			maxConnsConfigKey,
 		)

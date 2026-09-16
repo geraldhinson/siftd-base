@@ -2,12 +2,15 @@ package unittests
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/geraldhinson/siftd-base/pkg/resourceStore"
 	"github.com/geraldhinson/siftd-base/pkg/serviceBase"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
 type Employee struct {
@@ -759,6 +762,153 @@ func newTestResourceStore(
 	t.Cleanup(store.Close)
 
 	return store
+}
+
+func TestDetermineMaxConnectionPoolSize(t *testing.T) {
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+
+	tests := []struct {
+		name            string
+		configKey       string
+		configuredValue string
+		setValue        bool
+		expected        int32
+		expectError     bool
+	}{
+		{
+			name:      "empty key uses general default",
+			configKey: "",
+			expected:  15,
+		},
+		{
+			name:      "noun key uses noun default",
+			configKey: constants.NOUN_DB_POOL_MAX_CONNS,
+			expected:  15,
+		},
+		{
+			name:      "journal key uses journal default",
+			configKey: constants.JOURNAL_DB_POOL_MAX_CONNS,
+			expected:  5,
+		},
+		{
+			name:      "health key uses health default",
+			configKey: constants.HEALTH_DB_POOL_MAX_CONNS,
+			expected:  2,
+		},
+		{
+			name:      "unknown key uses general default",
+			configKey: "CUSTOM_DB_POOL_MAX_CONNS",
+			expected:  15,
+		},
+		{
+			name:            "noun configuration overrides default",
+			configKey:       constants.NOUN_DB_POOL_MAX_CONNS,
+			configuredValue: "21",
+			setValue:        true,
+			expected:        21,
+		},
+		{
+			name:            "journal configuration overrides default",
+			configKey:       constants.JOURNAL_DB_POOL_MAX_CONNS,
+			configuredValue: "7",
+			setValue:        true,
+			expected:        7,
+		},
+		{
+			name:            "health configuration overrides default",
+			configKey:       constants.HEALTH_DB_POOL_MAX_CONNS,
+			configuredValue: "3",
+			setValue:        true,
+			expected:        3,
+		},
+		{
+			name:            "custom configuration overrides general default",
+			configKey:       "CUSTOM_DB_POOL_MAX_CONNS",
+			configuredValue: "9",
+			setValue:        true,
+			expected:        9,
+		},
+		{
+			name:            "configured value ignores surrounding whitespace",
+			configKey:       constants.JOURNAL_DB_POOL_MAX_CONNS,
+			configuredValue: " 6 ",
+			setValue:        true,
+			expected:        6,
+		},
+		{
+			name:            "malformed configured value returns error",
+			configKey:       constants.NOUN_DB_POOL_MAX_CONNS,
+			configuredValue: "bogus",
+			setValue:        true,
+			expected:        -1,
+			expectError:     true,
+		},
+		{
+			name:            "zero configured value returns error",
+			configKey:       constants.JOURNAL_DB_POOL_MAX_CONNS,
+			configuredValue: "0",
+			setValue:        true,
+			expected:        -1,
+			expectError:     true,
+		},
+		{
+			name:            "negative configured value returns error",
+			configKey:       constants.HEALTH_DB_POOL_MAX_CONNS,
+			configuredValue: "-1",
+			setValue:        true,
+			expected:        -1,
+			expectError:     true,
+		},
+		{
+			name:            "value larger than int32 returns error",
+			configKey:       constants.NOUN_DB_POOL_MAX_CONNS,
+			configuredValue: "2147483648",
+			setValue:        true,
+			expected:        -1,
+			expectError:     true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			configuration := viper.New()
+			if test.setValue {
+				configuration.Set(
+					test.configKey,
+					test.configuredValue,
+				)
+			}
+
+			store :=
+				&resourceStore.PostgresResourceStoreWithJournal[EmployeeResource]{}
+
+			actual, err := store.DetermineMaxConnectionPoolSize(
+				configuration,
+				logger,
+				test.configKey,
+			)
+
+			if test.expectError {
+				if err == nil {
+					t.Fatalf(
+						"expected an error, got pool size %d",
+						actual,
+					)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if actual != test.expected {
+				t.Errorf(
+					"expected pool size %d, got %d",
+					test.expected,
+					actual,
+				)
+			}
+		})
+	}
 }
 
 // TODO: add a 'Delete' (aka UpdateResource with Deleted = true) test
