@@ -29,12 +29,11 @@ func TestServiceBase_InstantiateAndCalls(t *testing.T) {
 			t.Fatalf("Failed to call noun router via loopback: %v, %d", err, status)
 		}
 		if status != http.StatusBadRequest {
-			t.Fatalf("Expected status %d, got %d", http.StatusOK, status)
+			t.Fatalf("Expected status %d, got %d", http.StatusBadRequest, status)
 		}
-		if body == nil {
-			t.Fatalf("Expected nil body, got %s", string(body))
+		if len(body) == 0 {
+			t.Fatal("expected a non-empty error response body")
 		}
-
 		// TestServiceBase_GoodParamNoneFound
 		body, err, status = shared.CallNounRouterViaLoopback(router.Configuration, nil, "GUID-fake-member-GUID", "AgeOver=40")
 		if err != nil {

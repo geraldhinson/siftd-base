@@ -6,10 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/geraldhinson/siftd-base/pkg/helpers"
@@ -33,6 +37,65 @@ type TestNounResource struct {
 
 type TestRouter struct {
 	*serviceBase.ServiceBase
+}
+
+func WaitUntilListening(listenAddress string) error {
+	parsedAddress, err := url.Parse(listenAddress)
+	if err != nil {
+		return fmt.Errorf(
+			"unable to parse listener address %q: %w",
+			listenAddress,
+			err,
+		)
+	}
+
+	if parsedAddress.Host == "" {
+		return fmt.Errorf(
+			"listener address %q does not contain a host and port",
+			listenAddress,
+		)
+	}
+
+	const startupTimeout = 5 * time.Second
+	const retryInterval = 25 * time.Millisecond
+	const dialTimeout = 100 * time.Millisecond
+
+	deadline := time.Now().Add(startupTimeout)
+	var lastErr error
+
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout(
+			"tcp",
+			parsedAddress.Host,
+			dialTimeout,
+		)
+		if err == nil {
+			conn.Close()
+			return nil
+		}
+
+		lastErr = err
+		time.Sleep(retryInterval)
+	}
+
+	return fmt.Errorf(
+		"listener at %s did not start within %v: %w",
+		listenAddress,
+		startupTimeout,
+		lastErr,
+	)
+}
+
+func SetupTestEnvironment() error {
+	resDir := os.Getenv("RESDIR_PATH")
+	if resDir == "" {
+		resDir = "."
+	}
+
+	return os.Setenv(
+		"SIFTD_ENV_FILE",
+		filepath.Join(resDir, "app.env"),
+	)
 }
 
 func (tr *TestRouter) testNounHandler(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +189,11 @@ func NewTestRouter(realm string, authType security.AuthTypes, authTimeout securi
 
 	go service.ListenAndServe()
 
+	if err := WaitUntilListening(
+		service.Configuration.GetString(constants.LISTEN_ADDRESS),
+	); err != nil {
+		return nil, err
+	}
 	return testRouter, nil
 
 }
@@ -163,8 +231,8 @@ func CallServiceViaLoopback(configuration *viper.Viper, httpMethod string, fakeU
 			err = fmt.Errorf("unable to retrieve HTTPS certificate file - shutting down")
 			return nil, err, http.StatusBadRequest
 		}
-
-		caCert, err := os.ReadFile(path + "/" + httpsListenCert)
+		var caCert []byte
+		caCert, err = os.ReadFile(path + "/" + httpsListenCert)
 		if err != nil {
 			return nil, err, http.StatusBadRequest
 		}
@@ -191,6 +259,13 @@ func CallServiceViaLoopback(configuration *viper.Viper, httpMethod string, fakeU
 		err = fmt.Errorf("client call to noun service failed with : %s", err)
 		return nil, err, http.StatusBadRequest
 	}
+	if res == nil {
+		return nil,
+			fmt.Errorf("client call to noun service returned no response"),
+			http.StatusBadRequest
+	}
+
+	defer res.Body.Close()
 
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {

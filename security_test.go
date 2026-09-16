@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/geraldhinson/siftd-base/pkg/helpers"
@@ -456,25 +454,17 @@ func Listener(service *serviceBase.ServiceBase) (*http.Server, error) {
 		}
 	}()
 
-	// pause until the server is up // TODO: make this less timing and more definitive (which will be faster too)
-	PauseUntilListening(listenParts[1])
-	//	time.Sleep(2 * time.Second)
+	// pause until the server is up
+	if err := shared.WaitUntilListening(listenAddress); err != nil {
+		_ = srv.Close()
+
+		return nil, fmt.Errorf(
+			"test listener failed to start: %w",
+			err,
+		)
+	}
 
 	return srv, nil
-}
-
-func PauseUntilListening(listenAddress string) {
-	// Wait for the server to start listening
-	for {
-		conn, err := net.Dial("tcp", listenAddress)
-		if err == nil {
-			conn.Close()
-			break
-		}
-		fmt.Println("Waiting for server to start...")
-		time.Sleep(100 * time.Millisecond)
-	}
-	fmt.Println("Server is now listening.")
 }
 
 func NewUnitTestRouter(realm string, authType security.AuthTypes, authTimeout security.AuthTimeout, list []string) (*UnitTestRouter, error) {

@@ -12,8 +12,44 @@
             "program": "${file}",
             "env": {
                 "RESDIR_PATH": "${workspaceFolder}",
+                "SIFTD_ENV_FILE": "${workspaceFolder}/app.env"
             },
             "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug All Tests",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RESDIR_PATH": "${workspaceFolder}",
+                "SIFTD_ENV_FILE": "${workspaceFolder}/app.env"
+            },
+            "args": [
+                "-test.v"
+            ]
         }
+        // for the below to work I would need to do some work to setup the env required for the individual tests,
+        // which I have not
+/*        {
+            "name": "Debug Current Test",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RESDIR_PATH": "${workspaceFolder}",
+                "SIFTD_ENV_FILE": "${workspaceFolder}/app.env"
+            },
+            "args": [
+                "-test.v",
+                "-test.run",
+                "^TestGetById$"
+            ]
+        }
+*/
     ]
 }

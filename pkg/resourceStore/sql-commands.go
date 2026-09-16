@@ -52,7 +52,7 @@ func (p *PostgresCommandHelper) GetJournalChangesCommand(clock, limit int64) (st
 
 func (p *PostgresCommandHelper) GetJournalMaxClockCommand() string {
 	query := `
-		SELECT MAX("Clock") AS "Clock"
+		SELECT COALESCE(MAX("Clock"), 0) AS "Clock"
 		FROM public."Journal";
 	`
 	return query

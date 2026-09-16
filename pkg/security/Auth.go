@@ -151,7 +151,23 @@ func (a *AuthModel) jwtAuthNCallback(token *jwt.Token) (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("authn - error getting issued at claim: %v", err)
 	}
-	// check if iat was issue over our configured expiry time above
+	// As of this writing, the call above *can* return nil, nil so we also check iat
+	if iat == nil {
+		return nil, fmt.Errorf("authn - missing or invalid issued at claim")
+	}
+
+	// ensure iat was not itself issued too far into the future
+	now := time.Now()
+	const allowedClockSkew = 2 * time.Minute
+
+	if iat.Time.After(now.Add(allowedClockSkew)) {
+		return nil, fmt.Errorf(
+			"authn - issued at claim is more than %v in the future",
+			allowedClockSkew,
+		)
+	}
+
+	// check whether iat exceeds the configured expiry lifetime
 	// find an authPolicy that matches the realm and use the authTimeout from it
 	var timeout = 0
 	for _, policy := range *a.authPolicy {
@@ -162,11 +178,17 @@ func (a *AuthModel) jwtAuthNCallback(token *jwt.Token) (interface{}, error) {
 	}
 
 	var expiry = iat.Add(time.Duration(timeout) * time.Second)
-	if !time.Now().Before(expiry) {
+	if !now.Before(expiry) {
 		return nil, fmt.Errorf("authn - detected expired token issued over %d seconds ago", timeout)
 	}
 
-	publicKey := a.KeyCache.GetPublicKeyById(token.Header["kid"].(string))
+	const maxKeyIDLength = 256
+	kid, ok := token.Header["kid"].(string)
+	if !ok || kid == "" || len(kid) > maxKeyIDLength {
+		return nil, fmt.Errorf("authn - missing or invalid key id")
+	}
+
+	publicKey := a.KeyCache.GetPublicKeyById(kid)
 	if publicKey == nil {
 		return nil, fmt.Errorf("authn - error getting signing key")
 	}
@@ -200,6 +222,13 @@ func (a *AuthModel) jwtAuthZCallback(token *jwt.Token, r *http.Request) (bool, i
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		a.Logger.Info("authz - error getting claims from token")
+		return false, http.StatusUnauthorized
+	}
+
+	// validate claims["sub"] exists, because it is used later
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		a.Logger.Info("authz - missing or invalid sub claim")
 		return false, http.StatusUnauthorized
 	}
 
@@ -250,16 +279,25 @@ func (a *AuthModel) jwtAuthZCallback(token *jwt.Token, r *http.Request) (bool, i
 				}
 				// loop through groups on claims and see if any match the list on the policy
 
-				roles := claims["roles"]
-				if roles != nil {
-					for _, group := range roles.([]interface{}) {
+				rolesValue, exists := claims["roles"]
+				if exists {
+					roles, ok := rolesValue.([]interface{})
+					if !ok {
+						a.Logger.Info("authz - roles claim is not an array")
+						return false, http.StatusUnauthorized
+					}
+
+					for _, group := range roles {
 						groupStr, ok := group.(string)
 						if !ok {
-							continue
+							a.Logger.Info("authz - found malformed group in approved groups array")
+							return false, http.StatusUnauthorized
 						}
+
 						if a.debugLevel > 0 {
 							a.Logger.Infof("authz - Checking for token-specified group: %v", groupStr)
 						}
+
 						// check if the group is in policy.Listed
 						if slices.Contains(policy.Listed, groupStr) {
 							if a.debugLevel > 0 {
@@ -346,12 +384,21 @@ func (a *AuthModel) ValidateSecurity(w http.ResponseWriter, r *http.Request) boo
 		a.writeHttpResponse(w, http.StatusUnauthorized, []byte(""))
 		return false
 	}
-	sub := claims["sub"]                       // this exists - used earlier
-	impersonatedBy := claims["impersonatedBy"] // this can exist or not
-	if impersonatedBy == nil {
-		impersonatedBy = ""
+	sub := claims["sub"] // this exists - checked earlier
+
+	impersonatedBy := ""
+
+	if value, exists := claims["impersonatedBy"]; exists {
+		var ok bool
+		impersonatedBy, ok = value.(string)
+		if !ok {
+			a.Logger.Info("auth header creation - found malformed impersonatedBy claim")
+			a.writeHttpResponse(w, http.StatusUnauthorized, nil)
+			return false
+		}
 	}
-	authToken := AuthToken(sub.(string) + ":" + impersonatedBy.(string))
+
+	authToken := AuthToken(sub.(string) + ":" + impersonatedBy)
 	if a.debugLevel > 0 {
 		a.Logger.Infof("auth header creation - authToken: %v", authToken)
 	}

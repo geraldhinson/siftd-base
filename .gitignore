@@ -29,3 +29,6 @@ go.work.sum
 
 # env file
 .env
+
+# expired certs (useful for testing)
+*EXPIRED

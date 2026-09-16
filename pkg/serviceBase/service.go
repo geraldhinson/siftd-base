@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +35,11 @@ type ServiceBase struct {
 	HealthStatus   *HealthStatus
 	CommandChannel chan string // can be used to communicate to backend processes when needed
 	debugLevel     int
+
+	shutdownMutex     sync.Mutex
+	shutdownFunctions []func()
+	shutdownStarted   bool
+	shutdownOnce      sync.Once
 }
 
 // ValidateConfigAndListen configures the services for the Queries Service and listens for incoming requests
@@ -108,6 +114,61 @@ func setup() (*logrus.Logger, *viper.Viper) {
 	configuration := viper.GetViper()
 
 	return logger, configuration
+}
+
+func (sb *ServiceBase) runShutdownFunctions() {
+	sb.shutdownOnce.Do(func() {
+		sb.shutdownMutex.Lock()
+		sb.shutdownStarted = true
+
+		shutdownFunctions := append(
+			[]func(){},
+			sb.shutdownFunctions...,
+		)
+
+		sb.shutdownMutex.Unlock()
+
+		for index := len(shutdownFunctions) - 1; index >= 0; index-- {
+			func(shutdownFunction func()) {
+				defer func() {
+					if recovered := recover(); recovered != nil {
+						sb.Logger.Errorf(
+							"service base - panic while running shutdown function: %v",
+							recovered,
+						)
+					}
+				}()
+
+				shutdownFunction()
+			}(shutdownFunctions[index])
+		}
+	})
+}
+
+func (sb *ServiceBase) RegisterShutdown(
+	shutdownFunction func(),
+) error {
+	if shutdownFunction == nil {
+		return fmt.Errorf(
+			"service base - cannot register a nil shutdown function",
+		)
+	}
+
+	sb.shutdownMutex.Lock()
+	defer sb.shutdownMutex.Unlock()
+
+	if sb.shutdownStarted {
+		return fmt.Errorf(
+			"service base - cannot register a shutdown function after shutdown has started",
+		)
+	}
+
+	sb.shutdownFunctions = append(
+		sb.shutdownFunctions,
+		shutdownFunction,
+	)
+
+	return nil
 }
 
 func (sb *ServiceBase) ListenAndServe() {
@@ -200,12 +261,22 @@ func (sb *ServiceBase) ListenAndServe() {
 	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownRelease()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		sb.Logger.Fatalf("service base - HTTP shutdown error: %v", err)
+	shutdownErr := server.Shutdown(shutdownCtx)
+
+	sb.runShutdownFunctions() // cleans up resource stores allocated
+
+	if shutdownErr != nil {
+		sb.Logger.Errorf(
+			"service base - HTTP shutdown error: %v",
+			shutdownErr,
+		)
+		return
 	}
 
 	if sb.debugLevel > 0 {
-		sb.Logger.Printf("service base - HTTP server shutdown complete")
+		sb.Logger.Printf(
+			"service base - HTTP server shutdown complete",
+		)
 	}
 }
 
@@ -281,23 +352,42 @@ func (sb *ServiceBase) RegisterRoute(httpMethod string, routeString string, auth
 	sb.Logger.Infof("service base - registered route: %s %s", httpMethod, routeString)
 }
 
-func (sb *ServiceBase) WriteHttpError(w http.ResponseWriter, status int, v error) {
+func (sb *ServiceBase) WriteHttpError(w http.ResponseWriter, status int, err error) {
 	var httpStatus int = http.StatusInternalServerError
+	message := constants.INTERNAL_SERVER_ERROR
 
 	switch status {
 	case constants.RESOURCE_NOT_FOUND_ERROR_CODE:
 		httpStatus = http.StatusNotFound
+		if err != nil {
+			message = err.Error()
+		}
 	case constants.RESOURCE_BAD_REQUEST_CODE:
 		httpStatus = http.StatusBadRequest
+		if err != nil {
+			message = err.Error()
+		}
 	case constants.RESOURCE_ALREADY_EXISTS_CODE:
 		httpStatus = http.StatusConflict
+		if err != nil {
+			message = err.Error()
+		}
 	case constants.RESOURCE_UNAUTHORIZED_CODE:
 		httpStatus = http.StatusForbidden
+		if err != nil {
+			message = err.Error()
+		}
+	case constants.RESOURCE_INTERNAL_ERROR_CODE:
+		httpStatus = http.StatusInternalServerError
+		// message already set above
+
+	default:
+		// Unknown statuses also retain generic 500 defaults.
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
-	w.Write([]byte(v.Error()))
+	w.Write([]byte(message))
 }
 
 func (sb *ServiceBase) WriteHttpOK(w http.ResponseWriter, v []byte) {

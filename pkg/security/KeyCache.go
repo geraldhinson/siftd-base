@@ -29,12 +29,12 @@ type RSAJWK struct {
 }
 
 type RSAPublicKey struct {
-	PublicKeyBytes []byte
+	PublicKeyBytes  []byte
+	ParsedPublicKey *rsa.PublicKey
 	// current time when this struct was created
 	// this is used to determine when to purge the cache
 	// of public keys
 	createdTime int64
-	// kid            string
 }
 
 type RSAPrivateKey struct {
@@ -69,15 +69,16 @@ func (k *KeyCache) PurgeOldKeys() {
 	// hard-coded cache expiry policy of 15 minutes for now
 	var expiryTime int64 = 900 // 15 minutes in seconds
 
+	k.mutex.Lock()
+	defer k.mutex.Unlock()
+
 	// loop through all keys and purge any that are older than 15 minutes
 	for kid, key := range k.publicKeys {
 		if time.Now().Unix()-key.createdTime > int64(expiryTime) {
 			if k.debugLevel > 0 {
 				k.logger.Infof("key cache - Purging old key: %s", kid)
 			}
-			k.mutex.Lock()
 			delete(k.publicKeys, kid)
-			k.mutex.Unlock()
 		}
 	}
 }
@@ -88,17 +89,22 @@ func (k *KeyCache) GetPublicKeyById(kid string) *rsa.PublicKey {
 	// Check if the key is already in the cache
 	var publicKeyBytes []byte
 	var err error
-	var foundInCache bool = false
 
 	k.mutex.Lock()
 	key, ok := k.publicKeys[kid]
 	k.mutex.Unlock()
 	if ok {
-		foundInCache = true
 		if k.debugLevel > 0 {
 			k.logger.Infof("key cache - Key found in cache: %s", kid)
 		}
+
+		if key.ParsedPublicKey != nil { // should never be nil currently
+			return key.ParsedPublicKey
+		}
+
+		// Defensive fallback for an entry that contains only encoded bytes.
 		publicKeyBytes = key.PublicKeyBytes
+
 	} else {
 		if k.debugLevel > 0 {
 			k.logger.Infof("key cache - Key not found in cache: %s", kid)
@@ -187,13 +193,11 @@ func (k *KeyCache) GetPublicKeyById(kid string) *rsa.PublicKey {
 	//		return nil
 	//	}
 
-	if !foundInCache {
-		// Add the key to the cache
-		timeCreated := time.Now().Unix()
-		k.mutex.Lock()
-		k.publicKeys[kid] = RSAPublicKey{PublicKeyBytes: publicKeyBytes, createdTime: timeCreated}
-		k.mutex.Unlock()
-	}
+	// Add the key to the cache
+	timeCreated := time.Now().Unix()
+	k.mutex.Lock()
+	k.publicKeys[kid] = RSAPublicKey{PublicKeyBytes: publicKeyBytes, ParsedPublicKey: rsaPubKey, createdTime: timeCreated}
+	k.mutex.Unlock()
 
 	return rsaPubKey
 }
@@ -217,6 +221,8 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 		return nil, err
 	}
 
+	const identityServiceTimeout = 10 * time.Second
+
 	var res *http.Response
 	if strings.Contains(listenAddress, "https") && strings.Contains(requestURL, "localhost") {
 		// all of this is required if this service is acting as a fake identity service and listening on
@@ -238,9 +244,18 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 			return nil, error
 		}
 		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM(caCert)
+
+		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+			err := fmt.Errorf(
+				"key cache - unable to add the configured localhost certificate %q to the trusted certificate pool; verify that the file contains a valid PEM CERTIFICATE block",
+				httpsListenCert,
+			)
+			k.logger.Warn(err)
+			return nil, err
+		}
 
 		client := &http.Client{
+			Timeout: identityServiceTimeout,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
 					RootCAs:    caCertPool,
@@ -257,24 +272,42 @@ func (k *KeyCache) FetchPublicKeyFromIdentityService(kid string) ([]byte, error)
 	} else {
 		// this is the normal case where we are calling the identity service
 		// and it is not localhost and we are not using a self-signed cert
-		res, err = http.DefaultClient.Do(req)
+		client := &http.Client{
+			Timeout: identityServiceTimeout,
+		}
+
+		res, err = client.Do(req)
 		if err != nil {
 			err = fmt.Errorf("key cache - http client call to identity service failed with : %s", err)
 			return nil, err
 		}
 	}
 
-	resBody, err := io.ReadAll(res.Body)
-	if err != nil {
-		err = fmt.Errorf("key cache - unable to read identity service reply: %s", err)
-		return nil, err
-	}
+	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		err = fmt.Errorf("key cache - identity service returned status code: %d", res.StatusCode)
 		return nil, err
 	}
 
+	// read body but set an upper limit for self defense in case something unexpected / invalid is returned
+	const maxPublicKeyResponseSize = 64 * 1024
+
+	limitedReader := io.LimitReader(
+		res.Body,
+		maxPublicKeyResponseSize+1,
+	)
+	resBody, err := io.ReadAll(limitedReader)
+	if err != nil {
+		err = fmt.Errorf("key cache - unable to read identity service reply: %s", err)
+		return nil, err
+	}
+	if len(resBody) > maxPublicKeyResponseSize {
+		return nil, fmt.Errorf(
+			"key cache - identity service response exceeded %d bytes",
+			maxPublicKeyResponseSize,
+		)
+	}
 	// resBody is the public key, return it
 	return resBody, nil
 }

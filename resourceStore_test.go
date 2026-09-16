@@ -2,14 +2,12 @@ package unittests
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
 	"github.com/geraldhinson/siftd-base/pkg/resourceStore"
 	"github.com/geraldhinson/siftd-base/pkg/serviceBase"
-	"github.com/spf13/viper"
 )
 
 type Employee struct {
@@ -23,28 +21,15 @@ type EmployeeResource struct {
 	Employee Employee `json:"employee"`
 }
 
-var gServiceBase *serviceBase.ServiceBase
-var gResourceStore *resourceStore.PostgresResourceStoreWithJournal[EmployeeResource]
-
-func setupEnvVars(t *testing.T) *viper.Viper {
-	// Initialize configuration
-	viper.AddConfigPath(os.Getenv("RESDIR_PATH"))
-	viper.SetConfigFile("app.env")
-	viper.AutomaticEnv() // overrides app.env with environment variables if same name found
-	err := viper.ReadInConfig()
-	if err != nil {
-		t.Error("Failed to read config for service.")
-		return nil
-	}
-	configuration := viper.GetViper()
-
-	return configuration
-}
-
 func TestEnvironmentVariablesExist(t *testing.T) {
-	configuration := setupEnvVars(t)
+	testService := serviceBase.NewServiceBase()
+	if testService == nil {
+		t.Fatal("Failed to create service base.")
+	}
+
+	configuration := testService.Configuration
 	if configuration == nil {
-		t.Fatal("Failed to read config for service.")
+		t.Fatal("Service base returned nil configuration.")
 	}
 
 	debugFlagAuth := configuration.GetString(constants.DEBUGSIFTD_AUTH)
@@ -79,18 +64,18 @@ func TestEnvironmentVariablesExist(t *testing.T) {
 	// check if called services is a valid JSON array
 	var stringArray []string
 	// Unmarshal the JSON array
-	if err := viper.UnmarshalKey(constants.CALLED_SERVICES, &stringArray); err != nil {
+	if err := configuration.UnmarshalKey(constants.CALLED_SERVICES, &stringArray); err != nil {
 		t.Fatalf("failed unmarshalling called services JSON from env var: %v", err)
 	}
 
 }
 
 func TestCreateServiceBase(t *testing.T) {
-	gServiceBase = serviceBase.NewServiceBase()
-	if gServiceBase == nil {
-		t.Fatal("Expected non-nil serviceBase")
-	} else if gServiceBase.HealthStatus.Status != constants.HEALTH_STATUS_HEALTHY {
-		t.Errorf("Expected healthy status, got %s", gServiceBase.HealthStatus.Status)
+	service := serviceBase.NewServiceBase()
+	if service == nil {
+		t.Fatal("Expected non-nil service")
+	} else if service.HealthStatus.Status != constants.HEALTH_STATUS_HEALTHY {
+		t.Errorf("Expected healthy status, got %s", service.HealthStatus.Status)
 	}
 }
 
@@ -98,44 +83,49 @@ func TestCreateServiceBaseFail(t *testing.T) {
 	// override the env variable constants.SERVICE_INSTANCE_NAME
 	// to simulate a failure
 
-	configuration := setupEnvVars(t)
-	if configuration == nil {
-		t.Fatal("Failed to read config for service.")
-		return
+	validService := serviceBase.NewServiceBase()
+	if validService == nil {
+		t.Fatal("Failed to create baseline service base.")
 	}
-	// Get the service instance name from the configuration and unset it
+
+	configuration := validService.Configuration
 	serviceInstanceName := configuration.GetString(constants.SERVICE_INSTANCE_NAME)
 	if serviceInstanceName == "" {
-		t.Fatal("Service instance name is not set in the configuration.")
+		t.Fatal("Service instance name is not set in the baseline configuration.")
 	}
-	// Set the service instance name to an empty string
+
 	configuration.Set(constants.SERVICE_INSTANCE_NAME, "")
+	defer configuration.Set(constants.SERVICE_INSTANCE_NAME, serviceInstanceName)
 
-	ServiceBase := serviceBase.NewServiceBase()
-	if ServiceBase != nil {
-		t.Fatal("Expected nil serviceBase")
+	failedService := serviceBase.NewServiceBase()
+	if failedService != nil {
+		t.Fatal("Expected nil service base when service instance name is missing.")
 	}
-
-	// Reset the service instance name to the original value
-	configuration.Set(constants.SERVICE_INSTANCE_NAME, serviceInstanceName)
-	serviceInstanceNameReset := configuration.GetString(constants.SERVICE_INSTANCE_NAME)
-	if serviceInstanceName != serviceInstanceNameReset {
-		t.Fatal("Service instance name was not successfully reset in the configuration.")
-	}
-
 }
 
-func TestCreateResoureceStore(t *testing.T) {
+func TestCreateResourceStore(t *testing.T) {
+	testService := serviceBase.NewServiceBase()
+	if testService == nil {
+		t.Fatal("Failed to create baseline service base.")
+	}
+	configuration := testService.Configuration
+	logger := testService.Logger
 
-	var err error
-	gResourceStore, err = resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](gServiceBase.Configuration, gServiceBase.Logger)
+	store, err := resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		configuration,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err != nil {
 		t.Fatalf("Error creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if gResourceStore == nil {
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
-	selectCmd := gResourceStore.Cmds.GetHealthCheckCommand()
+
+	t.Cleanup(store.Close)
+
+	selectCmd := store.Cmds.GetHealthCheckCommand()
 	// check if string contains SELECT 1;
 	if selectCmd == "" {
 		t.Fatal("Expected non-empty health check command")
@@ -144,40 +134,86 @@ func TestCreateResoureceStore(t *testing.T) {
 	}
 }
 
+func TestDeprecatedNewPostgresResourceStoreWithJournal(t *testing.T) {
+	testService := serviceBase.NewServiceBase()
+	if testService == nil {
+		t.Fatal("Failed to create baseline service base.")
+	}
+
+	store, err :=
+		resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](
+			testService.Configuration,
+			testService.Logger,
+		)
+	if err != nil {
+		t.Fatalf(
+			"Deprecated NewPostgresResourceStoreWithJournal returned an error: %v",
+			err,
+		)
+	}
+	if store == nil {
+		t.Fatal(
+			"Deprecated NewPostgresResourceStoreWithJournal returned a nil store.",
+		)
+	}
+	t.Cleanup(store.Close)
+
+	if err := store.HealthCheck(); err != nil {
+		t.Fatalf(
+			"Store created through deprecated constructor failed its health check: %v",
+			err,
+		)
+	}
+}
+
 func TestCreateResoureceStoreFail(t *testing.T) {
 
-	// invalid type passed to NewPostgresResourceStoreWithJournal. Doesn't include ResourceBase
-	var err error
-	aResourceStore, err := resourceStore.NewPostgresResourceStoreWithJournal[Employee](gServiceBase.Configuration, gServiceBase.Logger)
+	testService := serviceBase.NewServiceBase()
+	if testService == nil {
+		t.Fatal("Failed to create baseline service base.")
+	}
+	configuration := testService.Configuration
+	logger := testService.Logger
+
+	// invalid type passed to NewPostgresJournaledResourceStore. Doesn't include ResourceBase
+	aStore, err := resourceStore.NewPostgresJournaledResourceStore[Employee](
+		configuration,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
 		t.Fatalf("Error not caught passing using invalid generic type while creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if aResourceStore != nil {
+	if aStore != nil {
 		t.Fatal("Expected nil store")
 	}
 
-	// nil parameter
-	ResourceStore, err := resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](nil, gServiceBase.Logger)
+	// nil config parameter
+	store, err := resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		nil,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
 		t.Fatalf("Error not caught passing nil config * while creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if ResourceStore != nil {
+	if store != nil {
 		t.Fatal("Expected nil store")
 	}
 
-	// nil parameter
-	ResourceStore, err = resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](gServiceBase.Configuration, nil)
+	// nil logger parameter
+	store, err = resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		configuration,
+		nil,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
-		t.Fatalf("Error not caught passing nil logger * while creating PostgresResourceStoreWithJournal: %v", err)
+		t.Fatalf("Error not caught passing nil logger * while creating PostgresstoreWithJournal: %v", err)
 	}
-	if ResourceStore != nil {
+	if store != nil {
 		t.Fatal("Expected nil store")
 	}
 
-	configuration := setupEnvVars(t)
-	if configuration == nil {
-		t.Fatal("Failed to read config for service.")
-	}
 	dbConnectionString := configuration.GetString(constants.DB_CONNECTION_STRING)
 	if dbConnectionString == "" {
 		t.Fatal("DB connection string is not set in the configuration.")
@@ -185,12 +221,17 @@ func TestCreateResoureceStoreFail(t *testing.T) {
 
 	// Set the db connection env var to an empty string
 	configuration.Set(constants.DB_CONNECTION_STRING, "")
+	defer configuration.Set(constants.DB_CONNECTION_STRING, dbConnectionString) // safety net
 
-	ResourceStore, err = resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](gServiceBase.Configuration, gServiceBase.Logger)
+	store, err = resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		configuration,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
 		t.Fatalf("Error not caught unset db connection string while creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if ResourceStore != nil {
+	if store != nil {
 		t.Fatal("Expected nil store")
 	}
 
@@ -208,12 +249,17 @@ func TestCreateResoureceStoreFail(t *testing.T) {
 
 	// Set the journal partition env var to an empty string
 	configuration.Set(constants.JOURNAL_PARTITION_NAME, "")
+	defer configuration.Set(constants.JOURNAL_PARTITION_NAME, journalPartitionString) // safety net
 
-	ResourceStore, err = resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](gServiceBase.Configuration, gServiceBase.Logger)
+	store, err = resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		configuration,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
 		t.Fatalf("Error not caught unset journal partition string while creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if ResourceStore != nil {
+	if store != nil {
 		t.Fatal("Expected nil store")
 	}
 
@@ -225,11 +271,15 @@ func TestCreateResoureceStoreFail(t *testing.T) {
 
 	// bogus db connection string
 	configuration.Set(constants.DB_CONNECTION_STRING, "bogus connection string")
-	ResourceStore, err = resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](gServiceBase.Configuration, gServiceBase.Logger)
+	store, err = resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		configuration,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
 		t.Fatalf("Error not caught bogus db connection string (corrupt connection string) while creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if ResourceStore != nil {
+	if store != nil {
 		t.Fatal("Expected nil store")
 	}
 	configuration.Set(constants.DB_CONNECTION_STRING, dbConnectionString)
@@ -240,11 +290,15 @@ func TestCreateResoureceStoreFail(t *testing.T) {
 
 	// valid db connection string, but with non-existent database name
 	configuration.Set(constants.DB_CONNECTION_STRING, "user=geraldhinson password=geraldhinson dbname=bogus host=localhost port=5432")
-	ResourceStore, err = resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](gServiceBase.Configuration, gServiceBase.Logger)
+	store, err = resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		configuration,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
 		t.Fatalf("Error not caught bogus db connection string (non-existent database) while creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if ResourceStore != nil {
+	if store != nil {
 		t.Fatal("Expected nil store")
 	}
 	configuration.Set(constants.DB_CONNECTION_STRING, dbConnectionString)
@@ -255,11 +309,15 @@ func TestCreateResoureceStoreFail(t *testing.T) {
 
 	// valid db connection string, but with failing login
 	configuration.Set(constants.DB_CONNECTION_STRING, "user=bogususer password=boguspassword dbname=unittests host=localhost port=5432")
-	ResourceStore, err = resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](gServiceBase.Configuration, gServiceBase.Logger)
+	store, err = resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		configuration,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
 		t.Fatalf("Error not caught bogus db connection string (login/password) while creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if ResourceStore != nil {
+	if store != nil {
 		t.Fatal("Expected nil store")
 	}
 	configuration.Set(constants.DB_CONNECTION_STRING, dbConnectionString)
@@ -270,11 +328,15 @@ func TestCreateResoureceStoreFail(t *testing.T) {
 
 	// valid db connection string, but with wrong listen port for DB
 	configuration.Set(constants.DB_CONNECTION_STRING, "user=bogususer password=boguspassword dbname=unittests host=localhost port=55432")
-	ResourceStore, err = resourceStore.NewPostgresResourceStoreWithJournal[EmployeeResource](gServiceBase.Configuration, gServiceBase.Logger)
+	store, err = resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+		configuration,
+		logger,
+		constants.NOUN_DB_POOL_MAX_CONNS,
+	)
 	if err == nil {
 		t.Fatalf("Error not caught bogus db connection string (port) while creating PostgresResourceStoreWithJournal: %v", err)
 	}
-	if ResourceStore != nil {
+	if store != nil {
 		t.Fatal("Expected nil store")
 	}
 	configuration.Set(constants.DB_CONNECTION_STRING, dbConnectionString)
@@ -286,18 +348,20 @@ func TestCreateResoureceStoreFail(t *testing.T) {
 }
 
 func TestHealthCheck(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
-	err := gResourceStore.HealthCheck()
+	err := store.HealthCheck()
 	if err != nil {
 		t.Errorf("Error checking health: %s", err)
 	}
 }
 
 func TestCreateResource(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
@@ -309,7 +373,7 @@ func TestCreateResource(t *testing.T) {
 	// this simulates the additional auth token that is added to the header by the security layer
 	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
+	createdResource, status, errmsg := store.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
@@ -338,7 +402,8 @@ func TestCreateResource(t *testing.T) {
 }
 
 func TestCreateResourceFails(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
@@ -350,7 +415,7 @@ func TestCreateResourceFails(t *testing.T) {
 	// this simulates the additional auth token that is added to the header by the security layer
 	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
+	createdResource, status, errmsg := store.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
@@ -365,7 +430,7 @@ func TestCreateResourceFails(t *testing.T) {
 			OwnerId: "1234"},
 		Employee: Employee{Name: "Goober", Age: 30},
 	}
-	createdResource, status, errmsg = gResourceStore.CreateResource(resourceDuplicateId, addedSecurityHeader)
+	createdResource, status, errmsg = store.CreateResource(resourceDuplicateId, addedSecurityHeader)
 	if status != constants.RESOURCE_ALREADY_EXISTS_CODE {
 		t.Errorf("Error creating resource - expected duplicate id error: %d, %v", status, errmsg)
 		return
@@ -379,7 +444,8 @@ func TestCreateResourceFails(t *testing.T) {
 }
 
 func TestUpdateResource(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
@@ -391,13 +457,13 @@ func TestUpdateResource(t *testing.T) {
 	// this simulates the additional auth token that is added to the header by the security layer
 	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
+	createdResource, status, errmsg := store.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
 	}
 	resourceA.Employee.Name = "Bob's Uncle"
-	updatedResource, status, errmsg := gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
+	updatedResource, status, errmsg := store.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error updating resource: %d, %v", status, errmsg)
 		return
@@ -432,7 +498,8 @@ func TestUpdateResource(t *testing.T) {
 }
 
 func TestUpdateResourceFails(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
@@ -444,7 +511,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	// this simulates the additional auth token that is added to the header by the security layer
 	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
+	createdResource, status, errmsg := store.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
@@ -456,7 +523,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	// Test invalid version
 	resourceA.Employee.Name = "Bob's Aunt"
 	resourceA.ResourceBase.Version = 2 // Set version to 1 to simulate a conflict
-	updatedResource, status, errmsg := gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
+	updatedResource, status, errmsg := store.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
 	if status != constants.RESOURCE_BAD_REQUEST_CODE {
 		t.Errorf("Error updating resource - wrong status returned for invalid version test: %d, %v", status, errmsg)
 		return
@@ -472,7 +539,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	resourceA.Employee.Name = "Bob's Aunt"
 	resourceA.ResourceBase.Version = 1       // Set version to 1 to simulate a conflict
 	var BadOwnerId = "NON-EXISTENT-OWNER-ID" // Set owner ID to a non-existent value
-	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, BadOwnerId, resourceA.Id, addedSecurityHeader)
+	updatedResource, status, errmsg = store.UpdateResource(resourceA, BadOwnerId, resourceA.Id, addedSecurityHeader)
 	if status != constants.RESOURCE_BAD_REQUEST_CODE {
 		t.Errorf("Error updating resource - wrong status returned for invalid ownerId param test: %d, %v", status, errmsg)
 		return
@@ -489,7 +556,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	resourceA.ResourceBase.Version = 1
 	var saveResourceId = resourceA.Id
 	resourceA.Id = "NON-EXISTENT-ID" // Set ID to a non-existent value
-	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
+	updatedResource, status, errmsg = store.UpdateResource(resourceA, resourceA.OwnerId, resourceA.Id, addedSecurityHeader)
 	if status != constants.RESOURCE_BAD_REQUEST_CODE {
 		t.Errorf("Error updating resource - wrong status returned for invalid id in body test: %d, %v", status, errmsg)
 		return
@@ -506,7 +573,7 @@ func TestUpdateResourceFails(t *testing.T) {
 	resourceA.Employee.Name = "Bob's Aunt"
 	resourceA.ResourceBase.Version = 1
 	var BadIdParam = "NON-EXISTENT-ID" // Set ID to a non-existent value
-	updatedResource, status, errmsg = gResourceStore.UpdateResource(resourceA, resourceA.OwnerId, BadIdParam, addedSecurityHeader)
+	updatedResource, status, errmsg = store.UpdateResource(resourceA, resourceA.OwnerId, BadIdParam, addedSecurityHeader)
 	if status != constants.RESOURCE_BAD_REQUEST_CODE {
 		t.Errorf("Error updating resource - wrong status returned for invalid id param test: %d, %v", status, errmsg)
 		return
@@ -521,7 +588,8 @@ func TestUpdateResourceFails(t *testing.T) {
 }
 
 func TestGetById(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
@@ -533,14 +601,14 @@ func TestGetById(t *testing.T) {
 	// this simulates the additional auth token that is added to the header by the security layer
 	addedSecurityHeader := resourceA.ResourceBase.OwnerId + ":" // owner w/o impersonation
 
-	createdResource, status, errmsg := gResourceStore.CreateResource(resourceA, addedSecurityHeader)
+	createdResource, status, errmsg := store.CreateResource(resourceA, addedSecurityHeader)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error creating resource: %d, %v", status, errmsg)
 		return
 	}
 
 	var fetchedResource EmployeeResource
-	status, errmsg = gResourceStore.GetById(createdResource.GetResourceBase().Id, createdResource.GetResourceBase().OwnerId, &fetchedResource)
+	status, errmsg = store.GetById(createdResource.GetResourceBase().OwnerId, createdResource.GetResourceBase().Id, &fetchedResource)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error getting resource by id: %d, %v", status, errmsg)
 		return
@@ -554,7 +622,8 @@ func TestGetById(t *testing.T) {
 }
 
 func TestGetByIdFail(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
@@ -564,7 +633,7 @@ func TestGetByIdFail(t *testing.T) {
 	}
 
 	var fetchedResource EmployeeResource
-	status, errmsg := gResourceStore.GetById(resourceA.Id, resourceA.OwnerId, &fetchedResource)
+	status, errmsg := store.GetById(resourceA.OwnerId, resourceA.Id, &fetchedResource)
 	if status != constants.RESOURCE_NOT_FOUND_ERROR_CODE {
 		t.Errorf("Error found resource by bogus id: %d, %v", status, errmsg)
 		return
@@ -572,12 +641,13 @@ func TestGetByIdFail(t *testing.T) {
 }
 
 func TestGetByOwnerId(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
 	var fetchedResources = []EmployeeResource{}
-	status, errmsg := gResourceStore.GetByOwnerId("1234", &fetchedResources)
+	status, errmsg := store.GetByOwnerId("1234", &fetchedResources)
 	if status != constants.RESOURCE_OK_CODE {
 		t.Errorf("Error getting resource by owner id: %d, %v", status, errmsg)
 		return
@@ -594,12 +664,13 @@ func TestGetByOwnerId(t *testing.T) {
 }
 
 func TestGetJournalMaxClock(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
 	var maxClock uint64
-	err := gResourceStore.GetJournalMaxClock(&maxClock)
+	err := store.GetJournalMaxClock(&maxClock)
 	if err != nil {
 		t.Errorf("Error getting journal max clock: %v", err)
 		return
@@ -610,12 +681,13 @@ func TestGetJournalMaxClock(t *testing.T) {
 }
 
 func TestGetJournalChanges(t *testing.T) {
-	if gResourceStore == nil {
+	store := newTestResourceStore(t)
+	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
 
 	var maxClock uint64
-	err := gResourceStore.GetJournalMaxClock(&maxClock)
+	err := store.GetJournalMaxClock(&maxClock)
 	if err != nil {
 		t.Errorf("Error getting journal max clock: %v", err)
 		return
@@ -623,7 +695,10 @@ func TestGetJournalChanges(t *testing.T) {
 
 	if maxClock > 0 {
 		var journalEntries = []resourceStore.ResourceJournalEntry{}
-		err := gResourceStore.GetJournalChanges(1, int64(maxClock), &journalEntries) // TODO: fix the type of limit in the API
+		status, err := store.GetJournalChanges(1, int64(maxClock), &journalEntries) // TODO: fix the type of limit in the API
+		if status != constants.RESOURCE_OK_CODE {
+			t.Fatalf("Error getting journal entries - expected status %d, got %d", constants.RESOURCE_OK_CODE, status)
+		}
 		if err != nil {
 			t.Errorf("Error getting journal entries: %v", err)
 			return
@@ -659,6 +734,31 @@ func TestGetJournalChanges(t *testing.T) {
 			t.Fatal("Expected JSON bytes to contain 'resource'")
 		}
 	}
+}
+
+func newTestResourceStore(
+	t *testing.T,
+) *resourceStore.PostgresResourceStoreWithJournal[EmployeeResource] {
+	t.Helper()
+
+	service := serviceBase.NewServiceBase()
+	if service == nil {
+		t.Fatal("Failed to create service base.")
+	}
+
+	store, err :=
+		resourceStore.NewPostgresJournaledResourceStore[EmployeeResource](
+			service.Configuration,
+			service.Logger,
+			constants.NOUN_DB_POOL_MAX_CONNS,
+		)
+	if err != nil {
+		t.Fatalf("Failed to create resource store: %v", err)
+	}
+
+	t.Cleanup(store.Close)
+
+	return store
 }
 
 // TODO: add a 'Delete' (aka UpdateResource with Deleted = true) test
