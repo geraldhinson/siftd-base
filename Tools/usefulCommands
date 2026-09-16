@@ -2,6 +2,7 @@ export set GONOSUMDB=github.com/geraldhinson/*
 go mod tidy
 go build ./...
 
+# for testing
 runUnitTests (which has stuff like below in it)
    go test -v
    go test -v --cover -coverpkg=github.com/geraldhinson/siftd-base/pkg/resourceStore,github.com/geraldhinson/siftd-base/pkg/serviceBase -coverprofile=coverage.out
@@ -10,3 +11,12 @@ runUnitTests (which has stuff like below in it)
 
 displayUnitTests (which contains the line below)
    go tool cover -html=coverage.out
+
+# also for testing
+you can run the appropriate launch.json entry while a given *_test file in the root folder is the active file (ie. clicked on)
+
+# to find vulnerabilities (locally similar to how github does for dependabot checks)
+/Users/geraldhinson/go/bin/govulncheck ./...
+
+# go vet ./... performs static analysis across every Go package in the current module (kinda lintish)
+go vet ./...
