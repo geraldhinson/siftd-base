@@ -5,6 +5,7 @@ package helpers
 //
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
@@ -25,15 +26,25 @@ func NewFakeIdentityServiceRouter(
 	timeout security.AuthTimeout,
 	approvedList []string) *FakeIdentityServiceRouter {
 
+	if serviceBase == nil {
+		return nil
+	}
+
+	if !serviceBase.IsLoopbackListener() {
+		serviceBase.Logger.Error(
+			"fake identity service router - refusing to initialize because the effective listener is not loopback",
+		)
+		return nil
+	}
 	fakeKeyStore := security.NewFakeKeyStore(serviceBase.Configuration, serviceBase.Logger)
 	if fakeKeyStore == nil {
-		serviceBase.Logger.Info("fake identity service router - error creating FakeKeyStore")
+		serviceBase.Logger.Error("fake identity service router - error creating FakeKeyStore")
 		return nil
 	}
 
 	authModel, err := serviceBase.NewAuthModel(realm, authType, timeout, approvedList)
 	if err != nil {
-		serviceBase.Logger.Info("fake identity service router - failed to initialize AuthModel with ", err)
+		serviceBase.Logger.Error("fake identity service router - failed to initialize AuthModel with ", err)
 		return nil
 	}
 
@@ -44,7 +55,7 @@ func NewFakeIdentityServiceRouter(
 
 	fakeIdentityServiceRouter.setupRoutes(authModel)
 	if fakeIdentityServiceRouter.Router == nil {
-		serviceBase.Logger.Info("fake identity service router - error creating FakeIdentityService router")
+		serviceBase.Logger.Error("fake identity service router - error creating FakeIdentityService router")
 		return nil
 	}
 
@@ -68,8 +79,8 @@ func (k *FakeIdentityServiceRouter) handleFakeUserLogin(w http.ResponseWriter, r
 
 	token, err := k.FakeKeyStore.JwtFakeUserLogin()
 	if err != nil {
-		k.Logger.Infof("fake identity service router - failed to create fake user token: %v", err)
-		k.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
+		k.Logger.Error("fake identity service router - failed to create fake user token: ", err)
+		k.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf(constants.INTERNAL_SERVER_ERROR))
 		return
 	}
 
@@ -82,8 +93,8 @@ func (k *FakeIdentityServiceRouter) handleFakeServiceLogin(w http.ResponseWriter
 
 	token, err := k.FakeKeyStore.JwtFakeServiceLogin()
 	if err != nil {
-		k.Logger.Infof("fake identity service router - failed to create fake machine token: %v", err)
-		k.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
+		k.Logger.Error("fake identity service router - failed to create fake machine token: ", err)
+		k.WriteHttpError(w, constants.RESOURCE_INTERNAL_ERROR_CODE, fmt.Errorf(constants.INTERNAL_SERVER_ERROR))
 		return
 	}
 
@@ -99,7 +110,7 @@ func (k *FakeIdentityServiceRouter) handleFakeGetPublicKey(w http.ResponseWriter
 	publicKeyBytes, err := k.FakeKeyStore.GetPublicKey(kid)
 	if err != nil {
 		k.Logger.Infof("fake identity service router - failed to find public key in fake identity service: %v", err)
-		k.WriteHttpError(w, constants.RESOURCE_BAD_REQUEST_CODE, err)
+		k.WriteHttpError(w, constants.RESOURCE_NOT_FOUND_ERROR_CODE, err)
 	} else {
 		k.Logger.Infof("fake identity service router - successfully found public key in fake identity service")
 		k.WriteHttpOK(w, publicKeyBytes)

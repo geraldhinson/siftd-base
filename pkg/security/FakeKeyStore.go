@@ -7,7 +7,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
@@ -62,12 +61,6 @@ func (k *KeyStore) GetPublicKey(kid string) ([]byte, error) {
 // The P/p key pair used for this is generated on the fly every time this service starts up.
 func (k *KeyStore) JwtFakeUserLogin() (based64JWT []byte, err error) {
 
-	// ensure that we are only running this in a local environment
-	listenAddress := k.configuration.GetString(constants.LISTEN_ADDRESS)
-	if !strings.Contains(listenAddress, "localhost") {
-		return nil, fmt.Errorf("fake key store - fake JWT tokens can only be generated when the queries service is listening on localhost")
-	}
-
 	// Create the JWT token
 	token := jwt.New(jwt.SigningMethodRS256)
 
@@ -96,12 +89,6 @@ func (k *KeyStore) JwtFakeUserLogin() (based64JWT []byte, err error) {
 }
 
 func (k *KeyStore) JwtFakeServiceLogin() (based64JWT []byte, err error) {
-
-	// ensure that we are only running this in a local environment
-	listenAddress := k.configuration.GetString(constants.LISTEN_ADDRESS)
-	if !strings.Contains(listenAddress, "localhost") {
-		return nil, fmt.Errorf("fake key store - fake JWT tokens can only be generated when the queries service is listening on localhost")
-	}
 
 	// Create the JWT token
 	token := jwt.New(jwt.SigningMethodRS256)

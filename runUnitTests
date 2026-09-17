@@ -1,3 +1,5 @@
 export set RESDIR_PATH=.
-go test -v --cover -coverpkg=github.com/geraldhinson/siftd-base/pkg/resourceStore,github.com/geraldhinson/siftd-base/pkg/security,github.com/geraldhinson/siftd-base/pkg/serviceBase,github.com/geraldhinson/siftd-base/pkg/helpers -coverprofile=coverage.out
+go test -v --cover -coverpkg=github.com/geraldhinson/siftd-base/pkg/resourceStore,github.com/geraldhinson/siftd-base/pkg/security,github.com/geraldhinson/siftd-base/pkg/serviceBase,github.com/geraldhinson/siftd-base/pkg/helpers -coverprofile=coverage.out \
+./...
+go tool cover -func=coverage.out | tail -1
 go tool cover -html=coverage.out

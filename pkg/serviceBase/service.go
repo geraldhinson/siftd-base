@@ -6,9 +6,12 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,6 +39,11 @@ type ServiceBase struct {
 	CommandChannel chan string // can be used to communicate to backend processes when needed
 	debugLevel     int
 
+	effectiveListenAddress string
+	listenScheme           string
+	serverAddress          string
+	loopbackListener       bool
+
 	shutdownMutex     sync.Mutex
 	shutdownFunctions []func()
 	shutdownStarted   bool
@@ -62,6 +70,16 @@ func NewServiceBase() *ServiceBase {
 	}
 	logger.Infof("service base - validating configuration for [Service: %s]", serviceInstanceName)
 
+	effectiveListenAddress,
+		listenScheme,
+		serverAddress,
+		loopbackListener,
+		err := resolveListenConfiguration(configuration)
+	if err != nil {
+		logger.Infof("service base - error resolving listen address from config: %v. Shutting down.", err)
+		return nil
+	}
+
 	keyCache := security.NewPublicKeyCache(configuration, logger)
 	if keyCache == nil {
 		logger.Info("service base - failed to create key store. Shutting down.")
@@ -79,13 +97,17 @@ func NewServiceBase() *ServiceBase {
 	commandChannel := make(chan string, 1)
 
 	return &ServiceBase{
-		Configuration:  configuration,
-		Logger:         logger,
-		Router:         router,
-		KeyCache:       keyCache,
-		HealthStatus:   health,
-		debugLevel:     debugLevel,
-		CommandChannel: commandChannel,
+		Configuration:          configuration,
+		Logger:                 logger,
+		Router:                 router,
+		KeyCache:               keyCache,
+		HealthStatus:           health,
+		debugLevel:             debugLevel,
+		CommandChannel:         commandChannel,
+		effectiveListenAddress: effectiveListenAddress,
+		listenScheme:           listenScheme,
+		serverAddress:          serverAddress,
+		loopbackListener:       loopbackListener,
 	}
 }
 
@@ -172,30 +194,11 @@ func (sb *ServiceBase) RegisterShutdown(
 }
 
 func (sb *ServiceBase) ListenAndServe() {
-	var listenAddress string
-	// if running in cloud the port will be supplied and we use it to override the listen address in the config
-	// if running locally, both using docker and not, we expect the listen address to be fully specified in the config
-	envPort := os.Getenv("PORT")
-	if envPort != "" {
-		listenAddress = "http://0.0.0.0:" + envPort
-	} else {
-		listenAddress = sb.Configuration.GetString(constants.LISTEN_ADDRESS)
-		if listenAddress == "" {
-			sb.Logger.Fatalf("service base - unable to retrieve listen address and port. Shutting down.")
-			return
-		}
-	}
-
-	// separate the http:// (or https://) from the host:port
-	listenParts := strings.SplitAfter(listenAddress, "://")
-	if len(listenParts) != 2 {
-		sb.Logger.Fatalf("service base - invalid listen address of '%s' found. The format must be http://host:port or https://host:port.", listenAddress)
-		return
-	}
+	listenAddress := sb.effectiveListenAddress
 
 	var certFile string
 	var keyFile string
-	if strings.Contains(listenParts[0], "https") {
+	if sb.listenScheme == "https" {
 		certFile = sb.Configuration.GetString(constants.HTTPS_CERT_FILENAME)
 		if certFile == "" {
 			sb.Logger.Fatalf("service base - unable to retrieve HTTPS certificate file from env var %s. Shutting down.", constants.HTTPS_CERT_FILENAME)
@@ -219,7 +222,7 @@ func (sb *ServiceBase) ListenAndServe() {
 	}
 
 	server := &http.Server{
-		Addr:    listenParts[1],
+		Addr:    sb.serverAddress,
 		Handler: sb.Router,
 	}
 
@@ -230,7 +233,7 @@ func (sb *ServiceBase) ListenAndServe() {
 	go func() {
 		sb.Logger.Printf("service base - inside 'listen' goroutine - starting HTTP server on %s", listenAddress)
 
-		if strings.Contains(listenParts[0], "https") {
+		if sb.listenScheme == "https" {
 			if err := server.ListenAndServeTLS(certFile, keyFile); !errors.Is(err, http.ErrServerClosed) {
 				sb.Logger.Fatalf("service base - inside 'listen' goroutine - https server listen error: %v", err)
 			}
@@ -404,4 +407,117 @@ func (sb *ServiceBase) GetQueryParams(r *http.Request) map[string]string {
 		}
 	}
 	return queryParams
+}
+
+func (sb *ServiceBase) IsLoopbackListener() bool {
+	return sb != nil && sb.loopbackListener
+}
+
+func resolveListenConfiguration(
+	configuration *viper.Viper,
+) (
+	effectiveAddress string,
+	scheme string,
+	serverAddress string,
+	loopback bool,
+	err error,
+) {
+	// if running in cloud (eg. Google Cloud Run) the port will be supplied and we use it to override the listen address in the config
+	// if running locally, both using docker and not, we expect the listen address to be fully specified in the config
+
+	portOverride := strings.TrimSpace(os.Getenv("PORT"))
+
+	if portOverride != "" {
+		if err := validateListenPort(portOverride); err != nil {
+			return "", "", "", false, fmt.Errorf(
+				"service base - invalid PORT value %q: %w",
+				portOverride,
+				err,
+			)
+		}
+
+		effectiveAddress = "http://" +
+			net.JoinHostPort("0.0.0.0", portOverride)
+	} else {
+		effectiveAddress = strings.TrimSpace(
+			configuration.GetString(constants.LISTEN_ADDRESS),
+		)
+		if effectiveAddress == "" {
+			return "", "", "", false, fmt.Errorf(
+				"service base - unable to retrieve listen address and port",
+			)
+		}
+	}
+
+	parsedAddress, err := url.Parse(effectiveAddress)
+	if err != nil {
+		return "", "", "", false, fmt.Errorf(
+			"service base - invalid listen address %q: %w",
+			effectiveAddress,
+			err,
+		)
+	}
+
+	scheme = strings.ToLower(parsedAddress.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", "", "", false, fmt.Errorf(
+			"service base - listen address %q must use http or https",
+			effectiveAddress,
+		)
+	}
+
+	if parsedAddress.User != nil ||
+		parsedAddress.RawQuery != "" ||
+		parsedAddress.Fragment != "" ||
+		(parsedAddress.Path != "" && parsedAddress.Path != "/") {
+		return "", "", "", false, fmt.Errorf(
+			"service base - listen address %q must not contain user information, a path, a query, or a fragment",
+			effectiveAddress,
+		)
+	}
+
+	host := parsedAddress.Hostname()
+	if host == "" {
+		return "", "", "", false, fmt.Errorf(
+			"service base - listen address %q does not contain a hostname",
+			effectiveAddress,
+		)
+	}
+
+	port := parsedAddress.Port()
+	if port == "" {
+		return "", "", "", false, fmt.Errorf(
+			"service base - listen address %q does not contain a port",
+			effectiveAddress,
+		)
+	}
+
+	if err := validateListenPort(port); err != nil {
+		return "", "", "", false, fmt.Errorf(
+			"service base - invalid port in listen address %q: %w",
+			effectiveAddress,
+			err,
+		)
+	}
+
+	serverAddress = parsedAddress.Host
+
+	ip := net.ParseIP(host)
+	loopback = strings.EqualFold(host, "localhost") ||
+		(ip != nil && ip.IsLoopback())
+
+	return effectiveAddress, scheme, serverAddress, loopback, nil
+}
+
+func validateListenPort(port string) error {
+	parsedPort, err := strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("port must be an integer: %w", err)
+	}
+
+	if parsedPort < 1 || parsedPort > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535")
+	}
+
+	return nil
 }

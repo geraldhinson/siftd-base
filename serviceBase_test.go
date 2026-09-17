@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/geraldhinson/siftd-base/pkg/constants"
+	"github.com/geraldhinson/siftd-base/pkg/helpers"
 	"github.com/geraldhinson/siftd-base/pkg/resourceStore"
 	"github.com/geraldhinson/siftd-base/pkg/security"
 	"github.com/geraldhinson/siftd-base/pkg/serviceBase"
@@ -185,4 +186,29 @@ func TestShutdownListener(t *testing.T) {
 
 	t.Logf("waiting 1 seconds to see shutdown")
 	time.Sleep(1 * time.Second)
+}
+
+func TestFakeIdentityRouterRejectsNonLoopbackListener(t *testing.T) {
+	t.Setenv("PORT", "8080")
+
+	service := serviceBase.NewServiceBase()
+	if service == nil {
+		t.Fatal("Expected non-nil service base")
+	}
+	if service.IsLoopbackListener() {
+		t.Fatal("Expected PORT override to produce a non-loopback listener")
+	}
+
+	fakeRouter := helpers.NewFakeIdentityServiceRouter(
+		service,
+		security.NO_REALM,
+		security.NO_AUTH,
+		security.NO_EXPIRY,
+		nil,
+	)
+	if fakeRouter != nil {
+		t.Fatal(
+			"Expected fake identity router construction to be rejected for a non-loopback listener",
+		)
+	}
 }

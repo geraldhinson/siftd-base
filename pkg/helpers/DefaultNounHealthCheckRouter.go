@@ -29,7 +29,7 @@ func NewNounHealthCheckRouter[R any](
 
 	authModel, err := serviceBase.NewAuthModel(realm, authType, timeout, approvedList)
 	if err != nil {
-		serviceBase.Logger.Info("noun healthcheck router - failed to initialize AuthModel with ", err)
+		serviceBase.Logger.Error("noun healthcheck router - failed to initialize AuthModel with ", err)
 		return nil
 	}
 
@@ -39,7 +39,7 @@ func NewNounHealthCheckRouter[R any](
 		constants.HEALTH_DB_POOL_MAX_CONNS,
 	)
 	if err != nil {
-		serviceBase.Logger.Info("noun healthcheck router - error creating PostgresResourceStoreWithJournal with ", err)
+		serviceBase.Logger.Error("noun healthcheck router - error creating PostgresResourceStoreWithJournal with ", err)
 		return nil
 	}
 
@@ -52,14 +52,14 @@ func NewNounHealthCheckRouter[R any](
 	if healthCheckRouter.Router == nil {
 		store.Close()
 
-		serviceBase.Logger.Info("noun healthcheck router - error creating NounHealthCheck router")
+		serviceBase.Logger.Error("noun healthcheck router - error creating NounHealthCheck router")
 		return nil
 	}
 
 	if err := serviceBase.RegisterShutdown(store.Close); err != nil {
 		store.Close()
 
-		serviceBase.Logger.Infof(
+		serviceBase.Logger.Errorf(
 			"noun healthcheck router - failed to register store shutdown: %v",
 			err,
 		)
@@ -74,7 +74,6 @@ func (h *HealthCheckRouter[R]) setupRoutes(authModel *security.AuthModel) {
 
 	var routeString = "/v1/health"
 	h.RegisterRoute(constants.HTTP_GET, routeString, authModel, h.GetHealthStandalone)
-
 }
 
 func (h *HealthCheckRouter[R]) GetHealthStandalone(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +93,7 @@ func (h *HealthCheckRouter[R]) GetHealthStandalone(w http.ResponseWriter, r *htt
 	err = h.GetListOfCalledServices(&health)
 	if err != nil {
 		h.Logger.Error("noun healthcheck router - failed to retrieve called services in GetHealthStandalone: ", err)
-		health.CalledServices = []string{err.Error()}
+		health.CalledServices = []string{}
 		health.Status = constants.HEALTH_STATUS_UNHEALTHY
 	}
 
@@ -112,13 +111,16 @@ func (h *HealthCheckRouter[R]) GetListOfCalledServices(health *serviceBase.Healt
 	// TODO: implement this method
 	calledServices := h.Configuration.GetString(constants.CALLED_SERVICES)
 	if calledServices == "" {
-		return fmt.Errorf("noun healthcheck router - called services not defined in env var: %s", constants.CALLED_SERVICES)
+		return fmt.Errorf("noun healthcheck router - called services are not defined in: %s", constants.CALLED_SERVICES)
 	}
 
 	// Unmarshal the JSON array
 	if err := json.Unmarshal([]byte(calledServices), &health.CalledServices); err != nil {
-		h.Logger.Error("noun healthcheck router - unmarshalling of called services JSON from env var failed with ", err)
-		return fmt.Errorf(constants.INTERNAL_SERVER_ERROR)
+		return fmt.Errorf(
+			"noun healthcheck router - failed to unmarshal called services from %s: %w",
+			constants.CALLED_SERVICES,
+			err,
+		)
 	}
 
 	return nil
